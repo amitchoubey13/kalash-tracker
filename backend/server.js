@@ -743,6 +743,57 @@ app.delete('/api/shifts/:id', (req, res) => {
 });
 
 // ══════════════════════════════════════════════════════════════════════════
+//  VEHICLE PERMISSIONS ROUTES
+// ══════════════════════════════════════════════════════════════════════════
+
+app.get('/api/vehicle-permissions', (req, res) => {
+  let perms = readJSON('vehiclePermissions.json');
+  const { userId, status } = req.query;
+  if (userId) perms = perms.filter(p => p.requestedBy === userId);
+  if (status) perms = perms.filter(p => p.status === status);
+  res.json(perms);
+});
+
+app.post('/api/vehicle-permissions', (req, res) => {
+  const perms = readJSON('vehiclePermissions.json');
+  const newPerm = {
+    id: uuidv4(),
+    requestedBy: req.body.requestedBy,
+    vehicleType: req.body.vehicleType || '',
+    destination: req.body.destination || '',
+    reason: req.body.reason || '',
+    date: req.body.date || new Date().toISOString().split('T')[0],
+    startTime: req.body.startTime || '',
+    endTime: req.body.endTime || '',
+    status: 'Pending',
+    approvedBy: null,
+    fine: 0,
+    fineReason: '',
+    notes: req.body.notes || '',
+    createdAt: new Date().toISOString()
+  };
+  perms.push(newPerm);
+  writeJSON('vehiclePermissions.json', perms);
+  res.status(201).json(newPerm);
+});
+
+app.put('/api/vehicle-permissions/:id', (req, res) => {
+  const perms = readJSON('vehiclePermissions.json');
+  const idx = perms.findIndex(p => p.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ error: 'Not found' });
+  Object.assign(perms[idx], req.body);
+  writeJSON('vehiclePermissions.json', perms);
+  res.json(perms[idx]);
+});
+
+app.delete('/api/vehicle-permissions/:id', (req, res) => {
+  const perms = readJSON('vehiclePermissions.json');
+  const filtered = perms.filter(p => p.id !== req.params.id);
+  writeJSON('vehiclePermissions.json', filtered);
+  res.json({ success: true });
+});
+
+// ══════════════════════════════════════════════════════════════════════════
 //  SEED INVENTORY (one-time reset)
 // ══════════════════════════════════════════════════════════════════════════
 

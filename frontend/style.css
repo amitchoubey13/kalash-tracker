@@ -1631,6 +1631,24 @@ select {
   gap: 8px;
 }
 
+/* ── Notify Sub-tabs ──────────────────────────────────────── */
+.notify-subtab {
+  flex: 1;
+  padding: 10px 4px;
+  background: none;
+  border: none;
+  border-bottom: 3px solid transparent;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.notify-subtab.active {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+}
+
 /* ── Shift Management ─────────────────────────────────────── */
 .shift-row {
   display: flex;

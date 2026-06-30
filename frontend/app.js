@@ -1567,8 +1567,37 @@ function showPhotoModalSrc(src) {
 // ══════════════════════════════════════════════════════════════
 //  NOTIFY TAB
 // ══════════════════════════════════════════════════════════════
+let notifySubTab = 'messages';
+
 function renderNotifyTab() {
   const tc = document.getElementById('tab-content');
+  tc.innerHTML = `
+    <div style="display:flex;border-bottom:2px solid var(--border);background:var(--surface)">
+      <button class="notify-subtab ${notifySubTab==='messages'?'active':''}" onclick="switchNotifyTab('messages')">💬 Messages</button>
+      <button class="notify-subtab ${notifySubTab==='vehicle'?'active':''}" onclick="switchNotifyTab('vehicle')" style="color:#c62828">🚗 Vehicle</button>
+    </div>
+    <div id="notify-subtab-content"></div>`;
+  renderNotifySubTab();
+}
+
+function switchNotifyTab(tab) {
+  notifySubTab = tab;
+  document.querySelectorAll('.notify-subtab').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.notify-subtab').forEach(b => { if (b.textContent.includes(tab === 'messages' ? 'Messages' : 'Vehicle')) b.classList.add('active'); });
+  renderNotifySubTab();
+}
+
+async function renderNotifySubTab() {
+  const tc = document.getElementById('notify-subtab-content');
+  if (!tc) return;
+  if (notifySubTab === 'vehicle') {
+    await renderVehiclePermissionTab(tc);
+    return;
+  }
+  renderMessagesSubTab(tc);
+}
+
+function renderMessagesSubTab(tc) {
 
   if (isOwnerOrManager()) {
     const staffOptions = allUsers.map(u => `<option value="${u.id}">${escHtml(u.name)} (${u.role})</option>`).join('');
@@ -1682,6 +1711,205 @@ function sendStaffNotifyAny() {
   const reason = document.getElementById('notify-reason')?.value || '';
   const msg = `${type} Notification\nDate: ${formatDate(date)}\nReason: ${reason || '(no reason given)'}\n— ${currentUser.name}, ${settings.resortName}`;
   openWhatsAppAny(msg);
+}
+
+// ══════════════════════════════════════════════════════════════
+//  VEHICLE PERMISSION TAB
+// ══════════════════════════════════════════════════════════════
+async function renderVehiclePermissionTab(tc) {
+  let perms = [];
+  try { perms = await api('GET', '/api/vehicle-permissions'); } catch(e) {}
+  perms.sort((a,b) => b.createdAt.localeCompare(a.createdAt));
+
+  const statusBadge = s => {
+    const map = { Pending:'#f57c00', Approved:'#2e7d32', Denied:'#c62828' };
+    return `<span style="padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;background:${map[s]||'#999'}22;color:${map[s]||'#999'};border:1px solid ${map[s]||'#999'}">${s}</span>`;
+  };
+
+  if (isOwnerOrManager()) {
+    const pending = perms.filter(p => p.status === 'Pending');
+    const others  = perms.filter(p => p.status !== 'Pending');
+
+    tc.innerHTML = `
+      <div class="notify-section">
+        <div class="notify-section-title" style="color:#c62828">🚗 Vehicle Permission Requests</div>
+        <button class="btn btn-primary btn-sm" style="margin-bottom:12px" onclick="openVehicleRequestModal()">+ New Request</button>
+
+        ${pending.length === 0 ? '<p style="color:var(--text-muted);font-size:13px">No pending requests</p>' :
+          pending.map(p => vehiclePermCardHTML(p, statusBadge, true)).join('')}
+
+        ${others.length > 0 ? `
+          <div style="font-weight:600;font-size:13px;margin:14px 0 8px;color:var(--text-muted)">Past Requests</div>
+          ${others.map(p => vehiclePermCardHTML(p, statusBadge, false)).join('')}` : ''}
+      </div>`;
+  } else {
+    const mine = perms.filter(p => p.requestedBy === currentUser.id);
+    tc.innerHTML = `
+      <div class="notify-section">
+        <div class="notify-section-title" style="color:#c62828">🚗 Vehicle Permission</div>
+        <p style="font-size:13px;color:var(--text-muted);margin-bottom:10px">Request owner approval before using any resort vehicle.</p>
+        <button class="btn btn-primary btn-sm" style="margin-bottom:12px" onclick="openVehicleRequestModal()">+ Request Permission</button>
+        ${mine.length === 0 ? '<p style="color:var(--text-muted);font-size:13px">No requests yet</p>' :
+          mine.map(p => vehiclePermCardHTML(p, statusBadge, false)).join('')}
+      </div>`;
+  }
+}
+
+function vehiclePermCardHTML(p, statusBadge, canAction) {
+  const requester = getUserById(p.requestedBy);
+  return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:10px;box-shadow:var(--shadow)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+      <strong style="font-size:14px">${escHtml(requester?.name || 'Unknown')}</strong>
+      ${statusBadge(p.status)}
+    </div>
+    <div style="font-size:13px;color:var(--text-muted);display:grid;gap:3px">
+      <span>🚗 Vehicle: <strong>${escHtml(p.vehicleType||'—')}</strong></span>
+      <span>📍 Destination: <strong>${escHtml(p.destination||'—')}</strong></span>
+      <span>📅 Date: <strong>${formatDate(p.date)}</strong> &nbsp; 🕐 ${escHtml(p.startTime||'—')} → ${escHtml(p.endTime||'—')}</span>
+      <span>📝 Reason: ${escHtml(p.reason||'—')}</span>
+      ${p.fine > 0 ? `<span style="color:#c62828;font-weight:600">⚠️ Fine: ₹${p.fine} — ${escHtml(p.fineReason)}</span>` : ''}
+      ${p.notes ? `<span>💬 Note: ${escHtml(p.notes)}</span>` : ''}
+    </div>
+    ${canAction && isOwnerOrManager() ? `
+    <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+      <button class="btn btn-primary btn-sm" onclick="approveVehicle('${p.id}')">✅ Approve</button>
+      <button class="btn btn-danger btn-sm" onclick="denyVehicle('${p.id}')">❌ Deny</button>
+      <button class="btn btn-ghost btn-sm" onclick="openFineModal('${p.id}')">⚠️ Set Fine</button>
+      ${requester?.phone ? `<button class="btn btn-wa btn-sm" onclick="notifyVehicleWA('${p.id}','${escHtml(requester.phone)}')">📲 Notify</button>` : ''}
+    </div>` : ''}
+    ${!canAction && isOwnerOrManager() && p.status !== 'Pending' ? `
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button class="btn btn-ghost btn-sm" onclick="openFineModal('${p.id}')">⚠️ Set Fine</button>
+      <button class="btn-icon" onclick="deleteVehiclePerm('${p.id}')">🗑️</button>
+    </div>` : ''}
+  </div>`;
+}
+
+function openVehicleRequestModal() {
+  const box = document.querySelector('#message-modal .modal-box');
+  const vehicles = ['Car','Bike','Scooter','Auto','Truck','Other'];
+  box.innerHTML = `
+    <div class="modal-header">
+      <span class="modal-title">🚗 Vehicle Permission Request</span>
+      <button class="modal-close" onclick="closeModal('message-modal')">×</button>
+    </div>
+    <form id="vp-form">
+      <div class="form-group"><label>Vehicle Type *<select id="vp-vehicle">
+        ${vehicles.map(v=>`<option value="${v}">${v}</option>`).join('')}
+      </select></label></div>
+      <div class="form-group"><label>Destination / Region *<input type="text" id="vp-dest" placeholder="e.g. Market, City, Village" required></label></div>
+      <div class="form-group"><label>Date *<input type="date" id="vp-date" value="${todayDate()}" required></label></div>
+      <div class="form-row">
+        <div class="form-group"><label>Start Time *<input type="time" id="vp-start" required></label></div>
+        <div class="form-group"><label>End Time *<input type="time" id="vp-end" required></label></div>
+      </div>
+      <div class="form-group"><label>Reason *<textarea id="vp-reason" rows="2" placeholder="Purpose of vehicle use..." required></textarea></label></div>
+      <p style="font-size:12px;color:#c62828;font-weight:500;margin-bottom:8px">⚠️ Using vehicle without owner approval may result in a fine.</p>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost" onclick="closeModal('message-modal')">Cancel</button>
+        <button type="submit" class="btn btn-primary">Submit Request</button>
+      </div>
+    </form>`;
+  document.getElementById('vp-form').onsubmit = async function(e) {
+    e.preventDefault();
+    const data = {
+      requestedBy: currentUser.id,
+      vehicleType: document.getElementById('vp-vehicle').value,
+      destination: document.getElementById('vp-dest').value.trim(),
+      date: document.getElementById('vp-date').value,
+      startTime: document.getElementById('vp-start').value,
+      endTime: document.getElementById('vp-end').value,
+      reason: document.getElementById('vp-reason').value.trim(),
+    };
+    try {
+      await api('POST', '/api/vehicle-permissions', data);
+      // Notify owner via WhatsApp
+      const owner = allUsers.find(u => u.role === 'Owner');
+      if (owner?.phone) {
+        const msg = `🚗 Vehicle Permission Request\nFrom: ${currentUser.name}\nVehicle: ${data.vehicleType}\nDestination: ${data.destination}\nDate: ${formatDate(data.date)}, ${data.startTime}–${data.endTime}\nReason: ${data.reason}\n— ${settings.resortName}`;
+        openWhatsApp(owner.phone, msg);
+      }
+      closeModal('message-modal');
+      showToast('Request submitted', 'success');
+      notifySubTab = 'vehicle';
+      renderNotifyTab();
+    } catch(err) { showToast(err.message, 'error'); }
+  };
+  document.querySelector('#message-modal .modal-backdrop').onclick = () => closeModal('message-modal');
+  openModal('message-modal');
+}
+
+async function approveVehicle(id) {
+  try {
+    const perm = await api('PUT', '/api/vehicle-permissions/' + id, { status: 'Approved', approvedBy: currentUser.id });
+    const requester = getUserById(perm.requestedBy);
+    if (requester?.phone) {
+      const msg = `✅ Vehicle Permission Approved!\nVehicle: ${perm.vehicleType}\nDestination: ${perm.destination}\nDate: ${formatDate(perm.date)}, ${perm.startTime}–${perm.endTime}\nApproved by: ${currentUser.name}\n— ${settings.resortName}`;
+      openWhatsApp(requester.phone, msg);
+    }
+    showToast('Approved & notified', 'success');
+    renderNotifyTab();
+  } catch(e) { showToast(e.message, 'error'); }
+}
+
+async function denyVehicle(id) {
+  try {
+    const perm = await api('PUT', '/api/vehicle-permissions/' + id, { status: 'Denied', approvedBy: currentUser.id });
+    const requester = getUserById(perm.requestedBy);
+    if (requester?.phone) {
+      const msg = `❌ Vehicle Permission Denied\nVehicle: ${perm.vehicleType}\nDestination: ${perm.destination}\nDenied by: ${currentUser.name}\nPlease contact the owner for more info.\n— ${settings.resortName}`;
+      openWhatsApp(requester.phone, msg);
+    }
+    showToast('Denied & notified', 'success');
+    renderNotifyTab();
+  } catch(e) { showToast(e.message, 'error'); }
+}
+
+function openFineModal(id) {
+  const box = document.querySelector('#confirm-modal .modal-box');
+  box.innerHTML = `
+    <div class="modal-header"><span class="modal-title">⚠️ Set Fine</span></div>
+    <p style="margin-bottom:10px;font-size:13px;color:var(--text-muted)">Set a fine for unauthorized or misuse of vehicle.</p>
+    <div class="form-group"><label>Fine Amount (₹) *<input type="number" id="fine-amount" min="0" placeholder="e.g. 500"></label></div>
+    <div class="form-group"><label>Reason *<input type="text" id="fine-reason" placeholder="e.g. Used without permission"></label></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('confirm-modal')">Cancel</button>
+      <button class="btn btn-danger" onclick="saveFine('${id}')">Apply Fine</button>
+    </div>`;
+  openModal('confirm-modal');
+}
+
+async function saveFine(id) {
+  const fine = parseFloat(document.getElementById('fine-amount')?.value) || 0;
+  const fineReason = document.getElementById('fine-reason')?.value.trim() || '';
+  if (!fine || !fineReason) { showToast('Enter fine amount and reason', 'error'); return; }
+  try {
+    const perm = await api('PUT', '/api/vehicle-permissions/' + id, { fine, fineReason, status: 'Denied' });
+    const requester = getUserById(perm.requestedBy);
+    if (requester?.phone) {
+      const msg = `⚠️ Vehicle Fine Notice\nDear ${requester.name},\nA fine of ₹${fine} has been applied.\nReason: ${fineReason}\nThis will be deducted from your salary.\n— ${settings.resortName}`;
+      openWhatsApp(requester.phone, msg);
+    }
+    closeModal('confirm-modal');
+    showToast('Fine applied & notified', 'success');
+    renderNotifyTab();
+  } catch(e) { showToast(e.message, 'error'); }
+}
+
+function notifyVehicleWA(id, phone) {
+  const perm = { id };
+  const msg = `Regarding your vehicle permission request at ${settings.resortName} — please check the app for status.`;
+  openWhatsApp(phone, msg);
+}
+
+async function deleteVehiclePerm(id) {
+  showConfirm('Delete this vehicle permission record?', async () => {
+    try {
+      await api('DELETE', '/api/vehicle-permissions/' + id);
+      showToast('Deleted', 'success');
+      renderNotifyTab();
+    } catch(e) { showToast(e.message, 'error'); }
+  });
 }
 
 // ══════════════════════════════════════════════════════════════
