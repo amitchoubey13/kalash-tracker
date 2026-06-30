@@ -22,6 +22,7 @@ let invHistoryView = false;
 let invLowStockOnly = false;
 let invPurchaseMode = false;
 let invPurchaseSelected = {}; // id → {name, nameHindi, unit, qty}
+let invPurchaseLogView = false;
 let taskStatusFilter = 'All';
 let taskCategoryFilter = 'All';
 let pendingConfirmCallback = null;
@@ -617,7 +618,7 @@ async function updateTaskStatus(taskId, newStatus) {
     if (idx !== -1) allTasks[idx] = result.task;
 
     if (result.doneInventoryPurchase && result.task.buyingListItems && result.task.buyingListItems.length > 0) {
-      showBuyingListConfirmModal(result.task);
+      await autoUpdateInventoryFromPurchase(result.task);
     }
     if (result.doneKitchenEquipment) {
       const phone = getUserPhone(result.task.assignedTo) || getUserPhone(result.task.requestedBy);
@@ -798,6 +799,25 @@ async function saveTask(taskId) {
     closeModal('task-modal');
     renderTasksTab();
   } catch (e) { showToast(e.message, 'error'); }
+}
+
+async function autoUpdateInventoryFromPurchase(task) {
+  const items = task.buyingListItems || [];
+  const entries = [];
+  const unmatched = [];
+  items.forEach(item => {
+    const invItem = allInventory.find(inv => inv.name.toLowerCase() === item.name.toLowerCase());
+    if (invItem) entries.push({ id: invItem.id, qty: item.qty, rate: item.rate || 0 });
+    else unmatched.push(item.name);
+  });
+  if (entries.length > 0) {
+    try {
+      await api('POST', '/api/inventory/bulk-add', { entries, loggedBy: currentUser.id, source: 'Purchase', date: todayDate() });
+      allInventory = await api('GET', '/api/inventory');
+      showToast(`✅ ${entries.length} item(s) added to stock automatically`, 'success');
+    } catch(e) { showToast('Stock update failed: ' + e.message, 'error'); }
+  }
+  if (unmatched.length > 0) showToast(`⚠️ Not found in inventory: ${unmatched.join(', ')}`, 'info');
 }
 
 function showBuyingListConfirmModal(task) {
@@ -2219,16 +2239,19 @@ async function renderInventoryTab() {
       <button class="btn btn-ghost btn-sm" onclick="document.getElementById('new-inv-cat-row').style.display='none'">Cancel</button>
     </div>
     <div style="display:flex;gap:6px;padding:8px 12px;flex-wrap:wrap;align-items:center">
-      <button class="btn btn-sm ${!invHistoryView&&!invLowStockOnly?'btn-primary':'btn-ghost'}" onclick="invHistoryView=false;invLowStockOnly=false;invPurchaseMode=false;renderInventoryTab()">Items</button>
-      <button class="btn btn-sm ${invHistoryView?'btn-primary':'btn-ghost'}" onclick="invHistoryView=true;invLowStockOnly=false;invPurchaseMode=false;renderInventoryTab()">History</button>
-      <button class="btn btn-sm ${invLowStockOnly?'btn-danger':'btn-ghost'}" onclick="invLowStockOnly=!invLowStockOnly;invHistoryView=false;invPurchaseMode=false;renderInventoryTab()">⚠️ Low Stock</button>
+      <button class="btn btn-sm ${!invHistoryView&&!invLowStockOnly&&!invPurchaseLogView?'btn-primary':'btn-ghost'}" onclick="invHistoryView=false;invLowStockOnly=false;invPurchaseMode=false;invPurchaseLogView=false;renderInventoryTab()">Items</button>
+      <button class="btn btn-sm ${invHistoryView?'btn-primary':'btn-ghost'}" onclick="invHistoryView=true;invLowStockOnly=false;invPurchaseMode=false;invPurchaseLogView=false;renderInventoryTab()">History</button>
+      <button class="btn btn-sm ${invPurchaseLogView?'btn-primary':'btn-ghost'}" onclick="invPurchaseLogView=true;invHistoryView=false;invLowStockOnly=false;invPurchaseMode=false;renderInventoryTab()">📅 Purchases</button>
+      <button class="btn btn-sm ${invLowStockOnly?'btn-danger':'btn-ghost'}" onclick="invLowStockOnly=!invLowStockOnly;invHistoryView=false;invPurchaseMode=false;invPurchaseLogView=false;renderInventoryTab()">⚠️ Low Stock</button>
       <div style="flex:1"></div>
       ${currentUser.role === 'Kitchen Staff' ? `<button class="btn btn-sm ${invPurchaseMode?'btn-danger':'btn-ghost'}" onclick="togglePurchaseMode()">${invPurchaseMode?'✕ Cancel':'🛒 खरीद Request'}</button>` : `
       <button class="btn btn-primary btn-sm" onclick="openAddItemModal()">+ Item</button>
       <button class="btn btn-ghost btn-sm" onclick="openBulkAddModal()">📦 Bulk Add</button>`}
     </div>`;
 
-  if (invHistoryView) {
+  if (invPurchaseLogView) {
+    html += await renderPurchaseLogHTML();
+  } else if (invHistoryView) {
     html += await renderInventoryHistoryHTML();
   } else {
     if (filteredItems.length === 0) {
@@ -2587,6 +2610,51 @@ async function renderInventoryHistoryHTML() {
       <td style="font-size:11px">${escHtml(h.source||'')}</td>
     </tr>`).join('')}</tbody>
   </table></div>`;
+}
+
+async function renderPurchaseLogHTML() {
+  let history = [];
+  try {
+    history = await api('GET', '/api/inventory/history');
+  } catch(e) {}
+  // Filter only purchase events
+  const purchases = history.filter(h => h.source === 'Purchase' || h.source === 'Task' || h.source === 'Bulk Add');
+  if (purchases.length === 0) return '<div class="empty-state"><span class="empty-state-icon">🛒</span><div class="empty-state-text">No purchases yet</div><div class="empty-state-sub">Mark an Inventory Purchase task as Done to record a purchase</div></div>';
+
+  // Group by date
+  const byDate = {};
+  purchases.forEach(h => {
+    if (!byDate[h.date]) byDate[h.date] = [];
+    byDate[h.date].push(h);
+  });
+  const dates = Object.keys(byDate).sort((a,b) => b.localeCompare(a));
+
+  return dates.map(date => {
+    const rows = byDate[date];
+    const total = rows.reduce((s, h) => s + (h.rate ? h.qty * h.rate : 0), 0);
+    return `<div style="margin:8px 12px;background:var(--surface);border-radius:10px;box-shadow:var(--shadow);overflow:hidden">
+      <div style="padding:10px 14px;background:var(--primary-lt);display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border)">
+        <span style="font-weight:700;font-size:14px">📅 ${formatDate(date)}</span>
+        ${total > 0 ? `<span style="font-size:13px;font-weight:600;color:var(--primary)">Total: ₹${total.toLocaleString('en-IN')}</span>` : ''}
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead><tr style="background:#f5f5f5">
+          <th style="padding:7px 12px;text-align:left;font-weight:600">Item</th>
+          <th style="padding:7px 8px;text-align:center;font-weight:600">Qty</th>
+          <th style="padding:7px 8px;text-align:center;font-weight:600">Unit</th>
+          <th style="padding:7px 8px;text-align:right;font-weight:600">Rate</th>
+          <th style="padding:7px 8px;text-align:right;font-weight:600">Amount</th>
+        </tr></thead>
+        <tbody>${rows.map((h,i) => `<tr style="${i%2===0?'':'background:#fafafa'}">
+          <td style="padding:7px 12px">${escHtml(h.name)}${h.nameHindi?`<br><span style="font-size:11px;color:var(--text-muted)">${escHtml(h.nameHindi)}</span>`:''}</td>
+          <td style="padding:7px 8px;text-align:center;font-weight:600;color:var(--primary)">+${h.qty}</td>
+          <td style="padding:7px 8px;text-align:center">${escHtml(h.unit||'')}</td>
+          <td style="padding:7px 8px;text-align:right">${h.rate ? '₹'+h.rate : '—'}</td>
+          <td style="padding:7px 8px;text-align:right;font-weight:600">${h.rate ? '₹'+(h.qty*h.rate).toLocaleString('en-IN') : '—'}</td>
+        </tr>`).join('')}</tbody>
+      </table>
+    </div>`;
+  }).join('');
 }
 
 // ══════════════════════════════════════════════════════════════
