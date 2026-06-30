@@ -743,6 +743,65 @@ app.delete('/api/shifts/:id', (req, res) => {
 });
 
 // ══════════════════════════════════════════════════════════════════════════
+//  FOOD MENU ROUTES
+// ══════════════════════════════════════════════════════════════════════════
+
+app.get('/api/food-menus', (req, res) => {
+  let menus = readJSON('foodMenus.json');
+  if (req.query.date) menus = menus.filter(m => m.date === req.query.date);
+  res.json(menus);
+});
+
+app.post('/api/food-menus', (req, res) => {
+  const menus = readJSON('foodMenus.json');
+  const newMenu = {
+    id: uuidv4(),
+    date: req.body.date || new Date().toISOString().split('T')[0],
+    mealType: req.body.mealType || 'Lunch',
+    timing: req.body.timing || '',
+    items: req.body.items || [],
+    createdBy: req.body.createdBy || null,
+    responses: [],
+    createdAt: new Date().toISOString()
+  };
+  menus.push(newMenu);
+  writeJSON('foodMenus.json', menus);
+  res.status(201).json(newMenu);
+});
+
+app.put('/api/food-menus/:id', (req, res) => {
+  const menus = readJSON('foodMenus.json');
+  const idx = menus.findIndex(m => m.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ error: 'Not found' });
+  const updates = req.body;
+  delete updates.id;
+  Object.assign(menus[idx], updates);
+  writeJSON('foodMenus.json', menus);
+  res.json(menus[idx]);
+});
+
+app.delete('/api/food-menus/:id', (req, res) => {
+  const menus = readJSON('foodMenus.json');
+  writeJSON('foodMenus.json', menus.filter(m => m.id !== req.params.id));
+  res.json({ success: true });
+});
+
+app.post('/api/food-menus/:id/respond', (req, res) => {
+  const menus = readJSON('foodMenus.json');
+  const idx = menus.findIndex(m => m.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ error: 'Not found' });
+  const { userId, confirmed, roti, puri, rice, skipItems, note } = req.body;
+  const responses = menus[idx].responses || [];
+  const existingIdx = responses.findIndex(r => r.userId === userId);
+  const responseObj = { userId, confirmed: !!confirmed, roti: Number(roti)||0, puri: Number(puri)||0, rice: rice !== false, skipItems: skipItems||[], note: note||'', respondedAt: new Date().toISOString() };
+  if (existingIdx !== -1) responses[existingIdx] = responseObj;
+  else responses.push(responseObj);
+  menus[idx].responses = responses;
+  writeJSON('foodMenus.json', menus);
+  res.json(menus[idx]);
+});
+
+// ══════════════════════════════════════════════════════════════════════════
 //  VEHICLE PERMISSIONS ROUTES
 // ══════════════════════════════════════════════════════════════════════════
 

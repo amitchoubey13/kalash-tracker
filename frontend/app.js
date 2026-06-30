@@ -1572,9 +1572,10 @@ let notifySubTab = 'messages';
 function renderNotifyTab() {
   const tc = document.getElementById('tab-content');
   tc.innerHTML = `
-    <div style="display:flex;border-bottom:2px solid var(--border);background:var(--surface)">
+    <div style="display:flex;border-bottom:2px solid var(--border);background:var(--surface);overflow-x:auto">
       <button class="notify-subtab ${notifySubTab==='messages'?'active':''}" onclick="switchNotifyTab('messages')">💬 Messages</button>
-      <button class="notify-subtab ${notifySubTab==='vehicle'?'active':''}" onclick="switchNotifyTab('vehicle')" style="color:#c62828">🚗 Vehicle</button>
+      <button class="notify-subtab ${notifySubTab==='vehicle'?'active':''}" onclick="switchNotifyTab('vehicle')" style="${notifySubTab==='vehicle'?'':'color:#c62828'}">🚗 Vehicle</button>
+      <button class="notify-subtab ${notifySubTab==='food'?'active':''}" onclick="switchNotifyTab('food')" style="${notifySubTab==='food'?'':'color:#f57c00'}">🍽️ Food</button>
     </div>
     <div id="notify-subtab-content"></div>`;
   renderNotifySubTab();
@@ -1582,18 +1583,14 @@ function renderNotifyTab() {
 
 function switchNotifyTab(tab) {
   notifySubTab = tab;
-  document.querySelectorAll('.notify-subtab').forEach(b => b.classList.remove('active'));
-  document.querySelectorAll('.notify-subtab').forEach(b => { if (b.textContent.includes(tab === 'messages' ? 'Messages' : 'Vehicle')) b.classList.add('active'); });
-  renderNotifySubTab();
+  renderNotifyTab();
 }
 
 async function renderNotifySubTab() {
   const tc = document.getElementById('notify-subtab-content');
   if (!tc) return;
-  if (notifySubTab === 'vehicle') {
-    await renderVehiclePermissionTab(tc);
-    return;
-  }
+  if (notifySubTab === 'vehicle') { await renderVehiclePermissionTab(tc); return; }
+  if (notifySubTab === 'food')    { await renderFoodMenuTab(tc); return; }
   renderMessagesSubTab(tc);
 }
 
@@ -1711,6 +1708,245 @@ function sendStaffNotifyAny() {
   const reason = document.getElementById('notify-reason')?.value || '';
   const msg = `${type} Notification\nDate: ${formatDate(date)}\nReason: ${reason || '(no reason given)'}\n— ${currentUser.name}, ${settings.resortName}`;
   openWhatsAppAny(msg);
+}
+
+// ══════════════════════════════════════════════════════════════
+//  FOOD MENU TAB
+// ══════════════════════════════════════════════════════════════
+async function renderFoodMenuTab(tc) {
+  let menus = [];
+  try { menus = await api('GET', '/api/food-menus?date=' + todayDate()); } catch(e) {}
+
+  const mealOrder = { Breakfast: 0, Lunch: 1, Dinner: 2 };
+  menus.sort((a, b) => (mealOrder[a.mealType]||0) - (mealOrder[b.mealType]||0));
+
+  const canSetMenu = currentUser.role === 'Kitchen Staff' || isOwnerOrManager();
+  const mealEmoji = { Breakfast: '🌅', Lunch: '☀️', Dinner: '🌙' };
+
+  let html = `<div class="notify-section">
+    <div class="notify-section-title" style="color:#f57c00">🍽️ Today's Staff Food — ${formatDate(todayDate())}</div>
+    ${canSetMenu ? `<button class="btn btn-primary btn-sm" style="margin-bottom:12px" onclick="openSetMenuModal()">+ Set Meal Menu</button>` : ''}`;
+
+  if (menus.length === 0) {
+    html += `<div class="empty-state"><span class="empty-state-icon">🍽️</span><div class="empty-state-text">No menu set for today</div><div class="empty-state-sub">${canSetMenu ? 'Tap "+ Set Meal Menu" to add' : 'Kitchen staff will set the menu soon'}</div></div>`;
+  } else {
+    menus.forEach(menu => {
+      const myResponse = menu.responses.find(r => r.userId === currentUser.id);
+      const totalRoti  = menu.responses.filter(r => r.confirmed).reduce((s,r) => s + (r.roti||0), 0);
+      const totalPuri  = menu.responses.filter(r => r.confirmed).reduce((s,r) => s + (r.puri||0), 0);
+      const totalRice  = menu.responses.filter(r => r.confirmed && r.rice !== false).length;
+      const confirmed  = menu.responses.filter(r => r.confirmed).length;
+      const declined   = menu.responses.filter(r => !r.confirmed).length;
+
+      html += `<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;margin-bottom:14px;overflow:hidden;box-shadow:var(--shadow)">
+        <div style="background:#fff8e1;padding:10px 14px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <span style="font-size:18px">${mealEmoji[menu.mealType]||'🍽️'}</span>
+            <strong style="font-size:15px;margin-left:6px">${menu.mealType}</strong>
+            ${menu.timing ? `<span style="font-size:12px;color:var(--text-muted);margin-left:8px">⏰ ${menu.timing}</span>` : ''}
+          </div>
+          <div style="display:flex;gap:6px">
+            ${canSetMenu ? `<button class="btn-icon" onclick="openEditMenuModal('${menu.id}')">✏️</button>` : ''}
+            ${isOwnerOrManager() ? `<button class="btn-icon" onclick="deleteFoodMenu('${menu.id}')">🗑️</button>` : ''}
+          </div>
+        </div>
+        <div style="padding:10px 14px">
+          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">
+            ${(menu.items||[]).map(item => `<span style="padding:3px 10px;background:#e8f5e9;color:#2e7d32;border-radius:12px;font-size:13px;font-weight:500">${escHtml(item)}</span>`).join('')}
+          </div>
+          ${isOwnerOrManager() ? `
+          <div style="display:flex;gap:10px;font-size:12px;color:var(--text-muted);margin-bottom:10px;flex-wrap:wrap">
+            <span>✅ Eating: <strong>${confirmed}</strong></span>
+            <span>❌ Skipping: <strong>${declined}</strong></span>
+            ${totalRoti > 0 ? `<span>🫓 Roti: <strong>${totalRoti}</strong></span>` : ''}
+            ${totalPuri > 0 ? `<span>🫓 Puri: <strong>${totalPuri}</strong></span>` : ''}
+            ${totalRice > 0 ? `<span>🍚 Rice: <strong>${totalRice} ppl</strong></span>` : ''}
+          </div>
+          <div style="margin-bottom:8px">
+            ${menu.responses.length === 0 ? '<p style="font-size:12px;color:var(--text-muted)">No responses yet</p>' :
+              menu.responses.map(r => {
+                const u = getUserById(r.userId);
+                const skips = r.skipItems?.length ? ' · Skip: ' + r.skipItems.join(', ') : '';
+                const qtys = [r.roti > 0 ? r.roti + ' Roti' : '', r.puri > 0 ? r.puri + ' Puri' : '', r.rice === false ? 'No Rice' : ''].filter(Boolean).join(', ');
+                return `<div style="font-size:12px;padding:4px 0;border-bottom:1px solid var(--border);display:flex;gap:6px;align-items:center">
+                  <span>${r.confirmed ? '✅' : '❌'}</span>
+                  <span style="flex:1"><strong>${escHtml(u?.name||'?')}</strong>${qtys ? ' · ' + qtys : ''}${skips ? escHtml(skips) : ''}${r.note ? ' · ' + escHtml(r.note) : ''}</span>
+                </div>`;
+              }).join('')}
+          </div>` : ''}
+          ${myResponse ? `
+          <div style="background:#f1f8ff;border:1px solid #bbdefb;border-radius:8px;padding:8px 10px;font-size:13px;margin-bottom:8px">
+            Your response: ${myResponse.confirmed ? '✅ Eating' : '❌ Skipping'}
+            ${myResponse.roti > 0 ? ` · ${myResponse.roti} Roti` : ''}
+            ${myResponse.puri > 0 ? ` · ${myResponse.puri} Puri` : ''}
+            ${myResponse.rice === false ? ' · No Rice' : ''}
+            ${myResponse.skipItems?.length ? ' · Skip: ' + myResponse.skipItems.join(', ') : ''}
+            ${myResponse.note ? ` · "${escHtml(myResponse.note)}"` : ''}
+          </div>` : ''}
+          <button class="btn btn-primary btn-sm" onclick="openFoodResponseModal('${menu.id}','${menu.mealType}',${JSON.stringify(menu.items||[]).replace(/"/g,'&quot;')})">
+            ${myResponse ? '✏️ Update Response' : '🍽️ Respond'}
+          </button>
+        </div>
+      </div>`;
+    });
+  }
+  html += '</div>';
+  tc.innerHTML = html;
+}
+
+function openSetMenuModal(menuId, existing) {
+  const box = document.querySelector('#message-modal .modal-box');
+  const isEdit = !!existing;
+  const meals = ['Breakfast','Lunch','Dinner'];
+  const commonItems = ['Roti','Puri','Rice','Dal','Sabzi','Salad','Paneer','Chicken','Fish','Soup','Sweet','Papad','Pickle','Curd','Raita'];
+
+  box.innerHTML = `
+    <div class="modal-header">
+      <span class="modal-title">${isEdit ? 'Edit' : 'Set'} Meal Menu</span>
+      <button class="modal-close" onclick="closeModal('message-modal')">×</button>
+    </div>
+    <form id="menu-form">
+      <div class="form-group"><label>Meal Type *<select id="menu-meal">
+        ${meals.map(m => `<option value="${m}" ${existing?.mealType===m?'selected':''}>${m}</option>`).join('')}
+      </select></label></div>
+      <div class="form-group"><label>Meal Time *<input type="time" id="menu-time" value="${existing?.timing||''}" required></label></div>
+      <div class="form-group">
+        <label>Menu Items *</label>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px" id="menu-item-chips">
+          ${(existing?.items||[]).map(item => menuItemChip(item)).join('')}
+        </div>
+        <div style="display:flex;gap:6px">
+          <input type="text" id="menu-item-input" placeholder="Type item name..." style="flex:1;font-size:14px!important">
+          <button type="button" class="btn btn-ghost btn-sm" onclick="addMenuItemChip()">Add</button>
+        </div>
+        <div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:4px">
+          ${commonItems.map(i => `<button type="button" class="btn btn-ghost btn-sm" style="font-size:11px;padding:3px 8px" onclick="addMenuItemChipValue('${i}')">${i}</button>`).join('')}
+        </div>
+      </div>
+      <p id="menu-error" class="form-error" hidden></p>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost" onclick="closeModal('message-modal')">Cancel</button>
+        <button type="submit" class="btn btn-primary">${isEdit ? 'Save' : 'Set Menu'}</button>
+      </div>
+    </form>`;
+
+  document.getElementById('menu-form').onsubmit = async function(e) {
+    e.preventDefault();
+    const items = Array.from(document.querySelectorAll('.menu-chip-item')).map(el => el.dataset.item).filter(Boolean);
+    if (items.length === 0) { document.getElementById('menu-error').textContent='Add at least one item'; document.getElementById('menu-error').hidden=false; return; }
+    const data = { mealType: document.getElementById('menu-meal').value, timing: document.getElementById('menu-time').value, items, date: todayDate(), createdBy: currentUser.id };
+    try {
+      if (isEdit) await api('PUT', '/api/food-menus/' + menuId, data);
+      else {
+        const menu = await api('POST', '/api/food-menus', data);
+        // Notify all staff via WhatsApp
+        const msg = `🍽️ ${data.mealType} Menu for today (${formatDate(todayDate())})\n⏰ Time: ${data.timing}\nItems: ${items.join(', ')}\nPlease respond in the app with your food preference.\n— ${settings.resortName}`;
+        const staffWithPhone = allUsers.filter(u => u.phone && u.id !== currentUser.id);
+        if (staffWithPhone.length > 0) openWhatsApp(staffWithPhone[0].phone, msg);
+      }
+      closeModal('message-modal');
+      showToast(isEdit ? 'Menu updated' : 'Menu set & staff notified', 'success');
+      notifySubTab = 'food';
+      renderNotifyTab();
+    } catch(err) { document.getElementById('menu-error').textContent=err.message; document.getElementById('menu-error').hidden=false; }
+  };
+  document.querySelector('#message-modal .modal-backdrop').onclick = () => closeModal('message-modal');
+  openModal('message-modal');
+}
+
+function menuItemChip(item) {
+  return `<span class="menu-chip-item" data-item="${escHtml(item)}" style="display:inline-flex;align-items:center;gap:4px;background:#e8f5e9;color:#2e7d32;border-radius:12px;padding:3px 10px;font-size:13px">
+    ${escHtml(item)} <span onclick="this.parentElement.remove()" style="cursor:pointer;font-size:14px;line-height:1;margin-left:2px">×</span>
+  </span>`;
+}
+
+function addMenuItemChip() {
+  const input = document.getElementById('menu-item-input');
+  const val = input?.value.trim();
+  if (!val) return;
+  document.getElementById('menu-item-chips').insertAdjacentHTML('beforeend', menuItemChip(val));
+  input.value = '';
+}
+
+function addMenuItemChipValue(val) {
+  document.getElementById('menu-item-chips').insertAdjacentHTML('beforeend', menuItemChip(val));
+}
+
+async function openEditMenuModal(menuId) {
+  let menus = [];
+  try { menus = await api('GET', '/api/food-menus?date=' + todayDate()); } catch(e) {}
+  const menu = menus.find(m => m.id === menuId);
+  if (menu) openSetMenuModal(menuId, menu);
+}
+
+function openFoodResponseModal(menuId, mealType, items) {
+  const box = document.querySelector('#task-modal .modal-box');
+  box.innerHTML = `
+    <div class="modal-header">
+      <span class="modal-title">🍽️ ${mealType} Response</span>
+      <button class="modal-close" onclick="closeModal('task-modal')">×</button>
+    </div>
+    <form id="food-resp-form">
+      <div class="form-group">
+        <label style="font-weight:600">Will you eat ${mealType}?</label>
+        <div style="display:flex;gap:10px;margin-top:6px">
+          <label style="display:flex;align-items:center;gap:6px;font-weight:400"><input type="radio" name="food-confirm" value="yes" checked> ✅ Yes, I'll eat</label>
+          <label style="display:flex;align-items:center;gap:6px;font-weight:400"><input type="radio" name="food-confirm" value="no"> ❌ Skip</label>
+        </div>
+      </div>
+      <div id="food-qty-section">
+        <div style="font-weight:600;font-size:13px;margin-bottom:8px">How many do you want?</div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px">
+          <div class="form-group" style="margin:0"><label style="font-size:13px">Roti<input type="number" id="resp-roti" value="2" min="0" max="20" style="width:60px!important;font-size:15px!important;padding:6px!important;margin-top:4px"></label></div>
+          <div class="form-group" style="margin:0"><label style="font-size:13px">Puri<input type="number" id="resp-puri" value="0" min="0" max="20" style="width:60px!important;font-size:15px!important;padding:6px!important;margin-top:4px"></label></div>
+        </div>
+        <div class="form-group">
+          <label style="font-weight:600;font-size:13px">Skip items (select what you don't want):</label>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">
+            ${items.map(item => `<label style="display:flex;align-items:center;gap:5px;font-size:13px;font-weight:400;background:var(--bg);padding:4px 10px;border-radius:10px">
+              <input type="checkbox" class="skip-item-chk" value="${escHtml(item)}"> ${escHtml(item)}
+            </label>`).join('')}
+          </div>
+        </div>
+      </div>
+      <div class="form-group"><label>Note (optional)<input type="text" id="resp-note" placeholder="e.g. Less spice, no onion..."></label></div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost" onclick="closeModal('task-modal')">Cancel</button>
+        <button type="submit" class="btn btn-primary">Submit Response</button>
+      </div>
+    </form>`;
+
+  document.querySelectorAll('input[name="food-confirm"]').forEach(r => {
+    r.addEventListener('change', () => {
+      document.getElementById('food-qty-section').style.display = r.value === 'yes' ? '' : 'none';
+    });
+  });
+
+  document.getElementById('food-resp-form').onsubmit = async function(e) {
+    e.preventDefault();
+    const confirmed = document.querySelector('input[name="food-confirm"]:checked')?.value === 'yes';
+    const roti = parseInt(document.getElementById('resp-roti')?.value)||0;
+    const puri = parseInt(document.getElementById('resp-puri')?.value)||0;
+    const skipItems = Array.from(document.querySelectorAll('.skip-item-chk:checked')).map(c => c.value);
+    const rice = !skipItems.includes('Rice');
+    const note = document.getElementById('resp-note')?.value||'';
+    try {
+      await api('POST', '/api/food-menus/' + menuId + '/respond', { userId: currentUser.id, confirmed, roti, puri, rice, skipItems, note });
+      closeModal('task-modal');
+      showToast('Response saved', 'success');
+      notifySubTab = 'food';
+      renderNotifyTab();
+    } catch(err) { showToast(err.message, 'error'); }
+  };
+  document.querySelector('#task-modal .modal-backdrop').onclick = () => closeModal('task-modal');
+  openModal('task-modal');
+}
+
+async function deleteFoodMenu(id) {
+  showConfirm('Delete this meal menu?', async () => {
+    try { await api('DELETE', '/api/food-menus/' + id); showToast('Deleted','success'); renderNotifyTab(); }
+    catch(e) { showToast(e.message,'error'); }
+  });
 }
 
 // ══════════════════════════════════════════════════════════════
