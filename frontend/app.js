@@ -626,7 +626,7 @@ async function updateTaskStatus(taskId, newStatus) {
     if (idx !== -1) allTasks[idx] = result.task;
 
     if (result.doneInventoryPurchase && result.task.buyingListItems && result.task.buyingListItems.length > 0) {
-      await autoUpdateInventoryFromPurchase(result.task);
+      showReceiveItemsModal(result.task);
     }
     if (result.doneKitchenEquipment) {
       const phone = getUserPhone(result.task.assignedTo) || getUserPhone(result.task.requestedBy);
@@ -828,46 +828,55 @@ async function autoUpdateInventoryFromPurchase(task) {
   if (unmatched.length > 0) showToast(`⚠️ Not found in inventory: ${unmatched.join(', ')}`, 'info');
 }
 
-function showBuyingListConfirmModal(task) {
+function showReceiveItemsModal(task) {
   const box = document.querySelector('#buying-list-modal .modal-box');
   const items = task.buyingListItems || [];
   box.innerHTML = `
     <div class="modal-header">
-      <span class="modal-title">Confirm Stock Received</span>
+      <span class="modal-title">✅ Mark Items Received</span>
       <button class="modal-close" onclick="closeModal('buying-list-modal')">×</button>
     </div>
-    <p style="margin-bottom:12px;color:var(--text-muted)">These items were in the buying list. Confirm receipt to add them to inventory:</p>
-    ${items.map((item,i) => `<div class="buying-list-item">
-      <span style="flex:2">${escHtml(item.name)}</span>
-      <input type="number" id="blc-qty-${i}" value="${item.qty}" style="width:70px;font-size:14px!important;padding:6px!important">
-      <span>${escHtml(item.unit||'')}</span>
-      <input type="number" id="blc-rate-${i}" value="${item.rate||0}" placeholder="₹ rate" style="width:70px;font-size:14px!important;padding:6px!important">
-    </div>`).join('')}
+    <p style="padding:10px 16px 4px;font-size:13px;color:var(--text-muted)">Tick only items that arrived. Set actual qty and rate received.</p>
+    <div style="padding:0 12px 8px">
+      ${items.map((item,i) => `
+      <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);flex-wrap:wrap">
+        <input type="checkbox" id="blc-chk-${i}" checked style="width:18px;height:18px;flex-shrink:0;cursor:pointer">
+        <span style="flex:1;font-size:14px;font-weight:500;min-width:80px">${escHtml(item.name)}</span>
+        <input type="number" id="blc-qty-${i}" value="${item.qty}" min="0" style="width:64px;font-size:13px!important;padding:5px!important;border:1px solid var(--border);border-radius:6px;text-align:center">
+        <span style="font-size:12px;color:var(--text-muted);min-width:24px">${escHtml(item.unit||'')}</span>
+        <input type="number" id="blc-rate-${i}" value="${item.rate||''}" min="0" placeholder="₹ rate" style="width:68px;font-size:13px!important;padding:5px!important;border:1px solid var(--border);border-radius:6px;text-align:right">
+      </div>`).join('')}
+    </div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('buying-list-modal')">Skip</button>
-      <button class="btn btn-primary" onclick="confirmBuyingListReceived(${JSON.stringify(items).replace(/"/g,'&quot;')})">Add to Inventory</button>
+      <button class="btn btn-primary" onclick="confirmReceivedItems(${JSON.stringify(items).replace(/"/g,'&quot;')})">Add to Inventory</button>
     </div>`;
   document.querySelector('#buying-list-modal .modal-backdrop').onclick = () => closeModal('buying-list-modal');
   openModal('buying-list-modal');
 }
 
-async function confirmBuyingListReceived(items) {
-  // Match items to inventory by name
+async function confirmReceivedItems(items) {
   const entries = [];
+  const skipped = [];
+  const unmatched = [];
   items.forEach((item, i) => {
+    const checked = document.getElementById('blc-chk-'+i)?.checked;
+    if (!checked) { skipped.push(item.name); return; }
     const qty = parseFloat(document.getElementById('blc-qty-'+i)?.value) || item.qty;
     const rate = parseFloat(document.getElementById('blc-rate-'+i)?.value) || item.rate || 0;
-    // Find matching inventory item by name
     const invItem = allInventory.find(inv => inv.name.toLowerCase() === item.name.toLowerCase());
     if (invItem) entries.push({ id: invItem.id, qty, rate });
+    else unmatched.push(item.name);
   });
   if (entries.length > 0) {
     try {
-      await api('POST', '/api/inventory/bulk-add', { entries, loggedBy: currentUser.id, source: 'Task', date: todayDate() });
+      await api('POST', '/api/inventory/bulk-add', { entries, loggedBy: currentUser.id, source: 'Purchase', date: todayDate() });
       allInventory = await api('GET', '/api/inventory');
-      showToast('Inventory updated', 'success');
-    } catch(e) { showToast(e.message, 'error'); }
+      showToast(`✅ ${entries.length} item(s) added to stock`, 'success');
+    } catch(e) { showToast(e.message, 'error'); return; }
   }
+  if (unmatched.length > 0) showToast(`⚠️ Not in inventory: ${unmatched.join(', ')}`, 'info');
+  if (skipped.length > 0) showToast(`⏭ Skipped (not received): ${skipped.join(', ')}`, 'info');
   closeModal('buying-list-modal');
 }
 
