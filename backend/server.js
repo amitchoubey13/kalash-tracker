@@ -498,6 +498,15 @@ app.post('/api/inventory/history', (req, res) => {
   res.status(201).json(entry);
 });
 
+// DELETE /api/inventory/history/:id
+app.delete('/api/inventory/history/:id', (req, res) => {
+  const history = readJSON('inventoryHistory.json');
+  const filtered = history.filter(h => h.id !== req.params.id);
+  if (filtered.length === history.length) return res.status(404).json({ error: 'Entry not found' });
+  writeJSON('inventoryHistory.json', filtered);
+  res.json({ ok: true });
+});
+
 // POST /api/inventory/bulk-add
 app.post('/api/inventory/bulk-add', (req, res) => {
   const items = readJSON('inventory.json');

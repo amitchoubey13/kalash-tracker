@@ -2655,8 +2655,9 @@ async function renderInventoryHistoryHTML() {
   } catch(e) {}
   history.sort((a,b) => b.date.localeCompare(a.date));
   if (history.length === 0) return '<div class="empty-state"><span class="empty-state-icon">📜</span><div class="empty-state-text">No history yet</div></div>';
+  const isOwner = currentUser.role === 'Owner';
   return `<div class="history-table-wrap"><table class="history-table">
-    <thead><tr><th>Date</th><th>Item</th><th>Qty</th><th>Unit</th><th>Rate</th><th>Source</th></tr></thead>
+    <thead><tr><th>Date</th><th>Item</th><th>Qty</th><th>Unit</th><th>Rate</th><th>Source</th>${isOwner?'<th></th>':''}</tr></thead>
     <tbody>${history.slice(0,100).map(h => `<tr>
       <td>${formatDate(h.date)}</td>
       <td>${escHtml(h.name)}<br><small style="color:var(--text-muted)">${escHtml(h.nameHindi||'')}</small></td>
@@ -2664,8 +2665,19 @@ async function renderInventoryHistoryHTML() {
       <td>${escHtml(h.unit)}</td>
       <td>${h.rate ? '₹'+h.rate : '—'}</td>
       <td style="font-size:11px">${escHtml(h.source||'')}</td>
+      ${isOwner ? `<td><button class="btn-icon" onclick="deleteInventoryHistory('${h.id}')" title="Delete">🗑️</button></td>` : ''}
     </tr>`).join('')}</tbody>
   </table></div>`;
+}
+
+async function deleteInventoryHistory(id) {
+  showConfirm('Delete this history entry?', async () => {
+    try {
+      await api('DELETE', '/api/inventory/history/' + id);
+      showToast('Entry deleted', 'success');
+      renderInventoryTab();
+    } catch(e) { showToast(e.message, 'error'); }
+  });
 }
 
 async function renderPurchaseLogHTML() {
