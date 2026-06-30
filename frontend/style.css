@@ -36,7 +36,7 @@ body {
   font-family: 'Noto Sans', 'Noto Sans Devanagari', sans-serif;
   background: var(--bg);
   color: var(--text);
-  font-size: 16px;
+  font-size: 18px;
   line-height: 1.5;
   max-width: 480px;
   margin: 0 auto;
@@ -148,14 +148,14 @@ img { max-width: 100%; display: block; }
 }
 
 .tab-label {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   line-height: 1.2;
   text-align: center;
 }
 
 .tab-hindi {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 400;
   opacity: 0.75;
   display: block;
@@ -276,8 +276,8 @@ img { max-width: 100%; display: block; }
 /* ── Form Elements ────────────────────────────────────────── */
 label {
   display: block;
-  font-size: 13px;
-  font-weight: 500;
+  font-size: 15px;
+  font-weight: 600;
   color: var(--text);
   margin-bottom: 12px;
 }
@@ -364,8 +364,8 @@ select {
   gap: 5px;
   border: none;
   border-radius: 8px;
-  padding: 10px 18px;
-  font-size: 14px;
+  padding: 12px 20px;
+  font-size: 16px;
   font-weight: 600;
   cursor: pointer;
   transition: opacity 0.15s, background 0.15s;
@@ -415,8 +415,8 @@ select {
 }
 
 .btn-sm {
-  padding: 8px 14px;
-  font-size: 13px;
+  padding: 9px 16px;
+  font-size: 14px;
   border-radius: 7px;
 }
 
@@ -476,7 +476,7 @@ select {
 }
 
 .card-title {
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 700;
   color: var(--text);
   margin-bottom: 6px;
@@ -484,7 +484,7 @@ select {
 }
 
 .card-meta {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--text-muted);
   display: flex;
   align-items: center;
@@ -494,7 +494,7 @@ select {
 }
 
 .card-desc {
-  font-size: 14px;
+  font-size: 15px;
   color: var(--text-muted);
   margin-bottom: 10px;
   display: -webkit-box;
@@ -905,12 +905,12 @@ select {
 }
 
 .qty-btn {
-  width: 30px;
-  height: 30px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
   border: 1px solid var(--border);
   background: var(--bg);
-  font-size: 18px;
+  font-size: 22px;
   font-weight: 700;
   color: var(--primary);
   display: flex;
@@ -924,7 +924,7 @@ select {
 .qty-btn:hover { background: var(--primary-lt); }
 
 .qty-input {
-  width: 56px !important;
+  width: 60px !important;
   text-align: center;
   padding: 6px 4px !important;
   font-size: 14px !important;
@@ -1522,8 +1522,8 @@ select {
 .status-btn {
   flex: 1;
   min-width: 76px;
-  padding: 8px 6px;
-  font-size: 12px;
+  padding: 10px 8px;
+  font-size: 14px;
   font-weight: 600;
   border-radius: 6px;
   border: 1px solid var(--border);

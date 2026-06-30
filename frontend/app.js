@@ -1357,48 +1357,138 @@ function getShiftForRecord(rec) {
 
 function renderAttCardHTML(user, rec, date, readonly) {
   const uid = user.id;
-  const assignedShift = getShiftForRecord(rec);
-  const shiftStart = assignedShift ? assignedShift.startTime : (user.shiftStartTime || settings?.shiftStartTime || '10:00');
 
-  const shiftOptions = allShifts.map(s =>
-    `<option value="${s.id}" ${rec?.shiftId === s.id ? 'selected' : ''}>${escHtml(s.name)} (${s.startTime}–${s.endTime})</option>`
-  ).join('');
+  // Professional check-in/check-out UI for staff's own card (not readonly)
+  if (!readonly) {
+    const isToday = date === todayDate();
+    const checkedIn = !!(rec?.dutyIn);
+    const checkedOut = !!(rec?.dutyOut);
+    const onLeave = !!(rec?.onLeave);
+    const breakStarted = !!(rec?.breakStart);
+    const breakEnded = !!(rec?.breakEnd);
 
-  const shiftDisplay = assignedShift
-    ? `<span style="display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:600;padding:2px 8px;border-radius:10px;background:${assignedShift.color}22;color:${assignedShift.color};border:1px solid ${assignedShift.color}">● ${escHtml(assignedShift.name)} ${assignedShift.startTime}–${assignedShift.endTime}</span>`
-    : `<span style="font-size:11px;color:var(--text-muted)">No shift assigned</span>`;
+    let statusBg, statusText, statusIcon, statusLabel;
+    if (onLeave) { statusBg='#fff3e0'; statusText='#e65100'; statusIcon='🏖️'; statusLabel='On Leave'; }
+    else if (checkedOut) { statusBg='#f3e5f5'; statusText='#7b1fa2'; statusIcon='✅'; statusLabel='Checked Out'; }
+    else if (checkedIn) { statusBg='#e8f5e9'; statusText='#2e7d32'; statusIcon='🟢'; statusLabel='Checked In'; }
+    else { statusBg='#ffebee'; statusText='#c62828'; statusIcon='⏰'; statusLabel='Not Checked In'; }
 
-  return `<div class="attendance-card" id="att-card-${uid}">
-    <div class="attendance-staff-header">
-      <div style="flex:1">
-        <strong>${escHtml(user.name)}</strong> <span class="role-badge role-${roleCssClass(user.role)}">${user.role}</span>
-        <div style="margin-top:5px">
-          ${!readonly ? `
-            <select id="shift-sel-${uid}" style="font-size:12px;padding:4px 6px;border:1px solid var(--border);border-radius:6px;background:#fff;max-width:220px">
-              <option value="">— No shift —</option>
-              ${shiftOptions}
-            </select>` : shiftDisplay}
-        </div>
+    return `<div class="attendance-card" id="att-card-${uid}" style="max-width:420px;margin:16px auto">
+      <div style="text-align:center;padding:8px 0 16px">
+        <div style="font-size:22px;font-weight:800;color:var(--text)">${escHtml(user.name)}</div>
+        <div style="font-size:14px;color:var(--text-muted);margin-top:2px">${escHtml(user.role)} · ${formatDate(date)}</div>
       </div>
-      ${!readonly ? `<button class="btn btn-primary btn-sm" onclick="saveAttendanceCard('${uid}','${date}')">Save</button>` : ''}
-    </div>
-    <div class="checkbox-row">
-      <input type="checkbox" id="onleave-${uid}" ${rec?.onLeave?'checked':''} onchange="toggleLeaveUI('${uid}')">
-      <label for="onleave-${uid}">On Leave</label>
-    </div>
-    <div id="time-fields-${uid}" ${rec?.onLeave?'style="display:none"':''}>
-      ${attTimeRow('Duty In', 'dutyin', uid, rec?.dutyIn||'', readonly)}
-      ${attTimeRow('Duty Out', 'dutyout', uid, rec?.dutyOut||'', readonly)}
-      ${attTimeRow('Break Start', 'breakstart', uid, rec?.breakStart||'', readonly)}
-      ${attTimeRow('Break End', 'breakend', uid, rec?.breakEnd||'', readonly)}
-      ${!readonly ? `<div class="form-group" style="margin-top:6px"><label style="font-size:12px">Late Reason<input type="text" id="latereason-${uid}" value="${escHtml(rec?.lateReason||'')}" style="font-size:14px!important"></label></div>` : ''}
-    </div>
-    <div id="leave-fields-${uid}" ${!rec?.onLeave?'style="display:none"':''}>
-      ${!readonly ? `<div class="form-group"><label style="font-size:12px">Leave Reason<input type="text" id="leavereason-${uid}" value="${escHtml(rec?.leaveReason||'')}" style="font-size:14px!important"></label></div>` : ''}
-      ${readonly && rec?.leaveReason ? `<div style="font-size:13px;color:var(--text-muted)">Reason: ${escHtml(rec.leaveReason)}</div>` : ''}
-    </div>
-    ${rec ? `<div style="font-size:11px;color:var(--text-muted);margin-top:6px">Record ID: ${rec.id.slice(0,8)}…</div>` : ''}
+
+      <div style="background:${statusBg};border-radius:14px;padding:16px;text-align:center;margin-bottom:20px">
+        <div style="font-size:36px;margin-bottom:6px">${statusIcon}</div>
+        <div style="font-size:18px;font-weight:800;color:${statusText}">${statusLabel}</div>
+        ${checkedIn && !onLeave ? `<div style="font-size:14px;color:${statusText};margin-top:4px;opacity:0.85">In: ${rec.dutyIn}${checkedOut?' · Out: '+rec.dutyOut:''}</div>` : ''}
+        ${breakStarted && !onLeave ? `<div style="font-size:13px;color:var(--text-muted);margin-top:2px">Break: ${rec.breakStart}${breakEnded?' – '+rec.breakEnd:' (ongoing)'}</div>` : ''}
+      </div>
+
+      ${!onLeave ? `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
+        <button onclick="quickCheckIn('${uid}','${date}')"
+          style="background:${checkedIn?'#e8f5e9':'var(--primary)'};color:${checkedIn?'#2e7d32':'#fff'};border:2px solid ${checkedIn?'#2e7d32':'var(--primary)'};border-radius:14px;padding:18px 8px;font-size:16px;font-weight:800;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:6px;-webkit-tap-highlight-color:transparent">
+          <span style="font-size:28px">${checkedIn?'✅':'📥'}</span>
+          <span>CHECK IN</span>
+          ${checkedIn?`<span style="font-size:12px;font-weight:400;opacity:0.8">${rec.dutyIn}</span>`:`<span style="font-size:12px;font-weight:400;opacity:0.7">${isToday?'Tap to mark':'Set time'}</span>`}
+        </button>
+        <button onclick="quickCheckOut('${uid}','${date}')"
+          style="background:${checkedOut?'#f3e5f5':checkedIn?'#7b1fa2':'#e0e0e0'};color:${checkedOut?'#7b1fa2':checkedIn?'#fff':'#999'};border:2px solid ${checkedOut?'#7b1fa2':checkedIn?'#7b1fa2':'#ccc'};border-radius:14px;padding:18px 8px;font-size:16px;font-weight:800;cursor:${checkedIn?'pointer':'default'};display:flex;flex-direction:column;align-items:center;gap:6px;-webkit-tap-highlight-color:transparent" ${!checkedIn?'disabled':''}>
+          <span style="font-size:28px">${checkedOut?'✅':'📤'}</span>
+          <span>CHECK OUT</span>
+          ${checkedOut?`<span style="font-size:12px;font-weight:400;opacity:0.8">${rec.dutyOut}</span>`:`<span style="font-size:12px;font-weight:400;opacity:0.7">${checkedIn?'Tap to mark':'Check in first'}</span>`}
+        </button>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
+        <button onclick="quickBreakStart('${uid}','${date}')"
+          style="background:${breakStarted?'#fff8e1':'#fff8e1'};color:${breakStarted?'#f57f17':'#f57f17'};border:2px solid #ffe082;border-radius:12px;padding:12px 8px;font-size:14px;font-weight:700;cursor:pointer;-webkit-tap-highlight-color:transparent" ${!checkedIn||checkedOut?'disabled style="opacity:0.4;cursor:default"':''}>
+          ☕ Break Start
+          ${breakStarted?`<br><span style="font-size:12px;font-weight:400">${rec.breakStart}</span>`:''}
+        </button>
+        <button onclick="quickBreakEnd('${uid}','${date}')"
+          style="background:#e8f5e9;color:#388e3c;border:2px solid #a5d6a7;border-radius:12px;padding:12px 8px;font-size:14px;font-weight:700;cursor:pointer;-webkit-tap-highlight-color:transparent" ${!breakStarted||breakEnded?'disabled style="opacity:0.4;cursor:default"':''}>
+          ✔ Break End
+          ${breakEnded?`<br><span style="font-size:12px;font-weight:400">${rec.breakEnd}</span>`:''}
+        </button>
+      </div>` : ''}
+
+      <div style="border-top:1px solid var(--border);padding-top:14px">
+        <label style="display:flex;align-items:center;gap:10px;font-size:16px;font-weight:600;cursor:pointer">
+          <input type="checkbox" id="onleave-${uid}" ${onLeave?'checked':''} onchange="quickToggleLeave('${uid}','${date}')" style="width:22px;height:22px">
+          🏖️ Mark as On Leave
+        </label>
+        ${onLeave && rec?.leaveReason ? `<div style="margin-top:8px;font-size:13px;color:var(--text-muted)">Reason: ${escHtml(rec.leaveReason)}</div>` : ''}
+        ${onLeave ? `<input type="text" id="leavereason-${uid}" placeholder="Leave reason (optional)" value="${escHtml(rec?.leaveReason||'')}" style="margin-top:8px;font-size:15px!important" onblur="saveLeaveReason('${uid}','${date}')">` : ''}
+      </div>
+    </div>`;
+  }
+
+  // Readonly display (used nowhere currently but kept for safety)
+  return `<div class="attendance-card" id="att-card-${uid}">
+    <strong>${escHtml(user.name)}</strong>
+    ${rec?.dutyIn ? `<div>In: ${rec.dutyIn}</div>` : ''}
+    ${rec?.dutyOut ? `<div>Out: ${rec.dutyOut}</div>` : ''}
   </div>`;
+}
+
+async function quickCheckIn(uid, date) {
+  const time = getCurrentTime();
+  await quickSaveAtt(uid, date, { dutyIn: time });
+}
+
+async function quickCheckOut(uid, date) {
+  const rec = await getAttRec(uid, date);
+  if (!rec?.dutyIn) { showToast('Please check in first', 'info'); return; }
+  const time = getCurrentTime();
+  await quickSaveAtt(uid, date, { dutyOut: time });
+}
+
+async function quickBreakStart(uid, date) {
+  const time = getCurrentTime();
+  await quickSaveAtt(uid, date, { breakStart: time });
+}
+
+async function quickBreakEnd(uid, date) {
+  const time = getCurrentTime();
+  await quickSaveAtt(uid, date, { breakEnd: time });
+}
+
+async function quickToggleLeave(uid, date) {
+  const cb = document.getElementById('onleave-' + uid);
+  await quickSaveAtt(uid, date, { onLeave: cb.checked, dutyIn: '', dutyOut: '', breakStart: '', breakEnd: '' });
+}
+
+async function saveLeaveReason(uid, date) {
+  const reason = document.getElementById('leavereason-' + uid)?.value || '';
+  await quickSaveAtt(uid, date, { leaveReason: reason });
+}
+
+async function getAttRec(uid, date) {
+  try {
+    const recs = await api('GET', '/api/attendance?date=' + date);
+    return recs.find(r => r.userId === uid) || null;
+  } catch(e) { return null; }
+}
+
+async function quickSaveAtt(uid, date, fields) {
+  try {
+    const existing = await getAttRec(uid, date);
+    const data = { userId: uid, date, ...fields };
+    let result;
+    if (existing) {
+      result = await api('PUT', '/api/attendance/' + existing.id, fields);
+    } else {
+      result = await api('POST', '/api/attendance', data);
+    }
+    showToast('Saved ✓', 'success');
+    // Re-render only the attendance day content
+    const recs = await api('GET', '/api/attendance?date=' + date);
+    const container = document.getElementById('att-content');
+    if (container) container.innerHTML = renderAttCardHTML(currentUser, recs.find(r=>r.userId===uid)||null, date, false);
+  } catch(e) { showToast(e.message, 'error'); }
 }
 
 function attTimeRow(label, key, uid, val, readonly) {
@@ -2408,7 +2498,9 @@ async function submitPurchaseRequest() {
     // Send WhatsApp to every Owner and Manager who has a phone number
     const list = items.map(it => `• ${it.name}${it.nameHindi?' / '+it.nameHindi:''} — ${it.qty} ${it.unit}`).join('\n');
     const msg = `🛒 खरीद सूची / Purchase Request\nFrom: ${currentUser.name}\n\n${list}${note?'\n\nNote: '+note:''}\n— ${settings.resortName}`;
-    recipients.filter(u => u.phone).forEach(u => openWhatsApp(u.phone, msg));
+    recipients.filter(u => u.phone).forEach((u, i) => {
+      setTimeout(() => openWhatsApp(u.phone, msg), i * 1500);
+    });
     renderInventoryTab();
   } catch(e) {
     const el = document.getElementById('pr-error');
