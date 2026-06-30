@@ -148,14 +148,14 @@ img { max-width: 100%; display: block; }
 }
 
 .tab-label {
-  font-size: 10px;
-  font-weight: 500;
+  font-size: 11px;
+  font-weight: 600;
   line-height: 1.2;
   text-align: center;
 }
 
 .tab-hindi {
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 400;
   opacity: 0.75;
   display: block;
@@ -415,15 +415,15 @@ select {
 }
 
 .btn-sm {
-  padding: 6px 12px;
-  font-size: 12px;
-  border-radius: 6px;
+  padding: 8px 14px;
+  font-size: 13px;
+  border-radius: 7px;
 }
 
 .btn-xs {
-  padding: 4px 8px;
-  font-size: 11px;
-  border-radius: 5px;
+  padding: 5px 10px;
+  font-size: 12px;
+  border-radius: 6px;
 }
 
 .btn-full {
@@ -461,10 +461,10 @@ select {
 /* ── Cards ────────────────────────────────────────────────── */
 .card {
   background: var(--surface);
-  border-radius: 10px;
-  padding: 14px 16px;
+  border-radius: 12px;
+  padding: 16px;
   box-shadow: var(--shadow);
-  margin: 8px 12px;
+  margin: 10px 12px;
 }
 
 .card-overdue {
@@ -476,26 +476,27 @@ select {
 }
 
 .card-title {
-  font-size: 15px;
-  font-weight: 600;
+  font-size: 16px;
+  font-weight: 700;
   color: var(--text);
-  margin-bottom: 4px;
+  margin-bottom: 6px;
+  line-height: 1.3;
 }
 
 .card-meta {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-muted);
   display: flex;
   align-items: center;
   gap: 6px;
   flex-wrap: wrap;
-  margin-bottom: 6px;
+  margin-bottom: 7px;
 }
 
 .card-desc {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--text-muted);
-  margin-bottom: 8px;
+  margin-bottom: 10px;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -515,9 +516,9 @@ select {
 /* ── Badges ───────────────────────────────────────────────── */
 .badge {
   display: inline-block;
-  padding: 2px 8px;
+  padding: 3px 9px;
   border-radius: 12px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
 }
@@ -1520,9 +1521,9 @@ select {
 
 .status-btn {
   flex: 1;
-  min-width: 72px;
-  padding: 5px 6px;
-  font-size: 11px;
+  min-width: 76px;
+  padding: 8px 6px;
+  font-size: 12px;
   font-weight: 600;
   border-radius: 6px;
   border: 1px solid var(--border);

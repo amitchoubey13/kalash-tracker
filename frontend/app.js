@@ -597,8 +597,10 @@ function taskCardHTML(task) {
         ${task.buyingListItems.map(it => {
           const isPending = it.received === false;
           const isReceived = it.received === true;
-          return `<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 10px;border-top:1px solid var(--border);font-size:13px;${isPending?'background:#fff3e0':''}">
-            <span style="${isPending?'text-decoration:line-through;color:#bbb;':''}${isReceived?'color:#388e3c;':''}">${escHtml(it.name)}</span>
+          return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 10px;border-top:1px solid var(--border);font-size:13px;${isPending?'background:#fff3e0':''}">
+            <span style="${isPending?'text-decoration:line-through;color:#bbb;':''}${isReceived?'color:#388e3c;':''}">
+              ${escHtml(it.name)}${it.nameHindi?`<br><small style="font-size:11px;opacity:0.7">${escHtml(it.nameHindi)}</small>`:''}
+            </span>
             <span style="display:flex;align-items:center;gap:6px">
               <span style="font-weight:700;color:${isPending?'#bbb':isReceived?'#388e3c':'var(--primary)'}">${it.receivedQty!==undefined&&isReceived?it.receivedQty:it.qty} ${escHtml(it.unit||'')}</span>
               ${isReceived?'<span style="font-size:10px;background:#e8f5e9;color:#388e3c;padding:1px 6px;border-radius:8px;font-weight:600">✓ Got</span>':''}
@@ -2386,7 +2388,7 @@ async function submitPurchaseRequest() {
   const note = document.getElementById('pr-note')?.value.trim() || '';
   const recipients = allUsers.filter(u => u.role === 'Owner' || u.role === 'Manager');
   const primaryRecipient = recipients[0] || null;
-  const buyingListItems = items.map(it => ({ name: it.name, qty: it.qty, unit: it.unit, rate: 0 }));
+  const buyingListItems = items.map(it => ({ name: it.name, nameHindi: it.nameHindi||'', qty: it.qty, unit: it.unit, rate: 0 }));
   try {
     await api('POST', '/api/tasks', {
       title: `Purchase Request by ${currentUser.name}${note?' — '+note:''}`,
@@ -2404,8 +2406,8 @@ async function submitPurchaseRequest() {
     closeModal('message-modal');
     showToast('Purchase request sent!', 'success');
     // Send WhatsApp to every Owner and Manager who has a phone number
-    const list = items.map(it => `• ${it.name} — ${it.qty} ${it.unit}`).join('\n');
-    const msg = `🛒 Purchase Request\nFrom: ${currentUser.name}\n\n${list}${note?'\n\nNote: '+note:''}\n— ${settings.resortName}`;
+    const list = items.map(it => `• ${it.name}${it.nameHindi?' / '+it.nameHindi:''} — ${it.qty} ${it.unit}`).join('\n');
+    const msg = `🛒 खरीद सूची / Purchase Request\nFrom: ${currentUser.name}\n\n${list}${note?'\n\nNote: '+note:''}\n— ${settings.resortName}`;
     recipients.filter(u => u.phone).forEach(u => openWhatsApp(u.phone, msg));
     renderInventoryTab();
   } catch(e) {
