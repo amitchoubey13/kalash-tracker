@@ -865,6 +865,11 @@ select {
   border-left: 4px solid var(--danger);
 }
 
+.inv-item-selected {
+  background: #e8f5e9;
+  border-left: 4px solid var(--primary) !important;
+}
+
 .inv-item-info {
   flex: 1;
   min-width: 0;

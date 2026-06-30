@@ -20,6 +20,8 @@ let selectedAttendanceDate = '';
 let selectedInventoryCategory = 'All';
 let invHistoryView = false;
 let invLowStockOnly = false;
+let invPurchaseMode = false;
+let invPurchaseSelected = {}; // id → {name, nameHindi, unit, qty}
 let taskStatusFilter = 'All';
 let taskCategoryFilter = 'All';
 let pendingConfirmCallback = null;
@@ -2217,12 +2219,13 @@ async function renderInventoryTab() {
       <button class="btn btn-ghost btn-sm" onclick="document.getElementById('new-inv-cat-row').style.display='none'">Cancel</button>
     </div>
     <div style="display:flex;gap:6px;padding:8px 12px;flex-wrap:wrap;align-items:center">
-      <button class="btn btn-sm ${!invHistoryView&&!invLowStockOnly?'btn-primary':'btn-ghost'}" onclick="invHistoryView=false;invLowStockOnly=false;renderInventoryTab()">Items</button>
-      <button class="btn btn-sm ${invHistoryView?'btn-primary':'btn-ghost'}" onclick="invHistoryView=true;invLowStockOnly=false;renderInventoryTab()">History</button>
-      <button class="btn btn-sm ${invLowStockOnly?'btn-danger':'btn-ghost'}" onclick="invLowStockOnly=!invLowStockOnly;invHistoryView=false;renderInventoryTab()">⚠️ Low Stock</button>
+      <button class="btn btn-sm ${!invHistoryView&&!invLowStockOnly?'btn-primary':'btn-ghost'}" onclick="invHistoryView=false;invLowStockOnly=false;invPurchaseMode=false;renderInventoryTab()">Items</button>
+      <button class="btn btn-sm ${invHistoryView?'btn-primary':'btn-ghost'}" onclick="invHistoryView=true;invLowStockOnly=false;invPurchaseMode=false;renderInventoryTab()">History</button>
+      <button class="btn btn-sm ${invLowStockOnly?'btn-danger':'btn-ghost'}" onclick="invLowStockOnly=!invLowStockOnly;invHistoryView=false;invPurchaseMode=false;renderInventoryTab()">⚠️ Low Stock</button>
       <div style="flex:1"></div>
+      ${currentUser.role === 'Kitchen Staff' ? `<button class="btn btn-sm ${invPurchaseMode?'btn-danger':'btn-ghost'}" onclick="togglePurchaseMode()">${invPurchaseMode?'✕ Cancel':'🛒 खरीद Request'}</button>` : `
       <button class="btn btn-primary btn-sm" onclick="openAddItemModal()">+ Item</button>
-      <button class="btn btn-ghost btn-sm" onclick="openBulkAddModal()">📦 Bulk Add</button>
+      <button class="btn btn-ghost btn-sm" onclick="openBulkAddModal()">📦 Bulk Add</button>`}
     </div>`;
 
   if (invHistoryView) {
@@ -2236,6 +2239,98 @@ async function renderInventoryTab() {
   }
 
   tc.innerHTML = html;
+
+  if (invPurchaseMode) {
+    const bar = document.createElement('div');
+    bar.id = 'purchase-bar';
+    bar.style.cssText = 'position:fixed;bottom:56px;left:0;right:0;background:var(--primary);color:#fff;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;z-index:200;box-shadow:0 -2px 8px rgba(0,0,0,0.2)';
+    const count = Object.keys(invPurchaseSelected).length;
+    bar.innerHTML = `<span style="font-weight:600;font-size:14px">${count} item${count!==1?'s':''} selected<br><span style="font-size:11px;font-weight:400;opacity:0.85">Tap item to select, set qty needed</span></span>
+      <button onclick="openPurchaseRequestModal()" ${count===0?'disabled':''} style="background:#fff;color:var(--primary);border:none;padding:8px 18px;border-radius:20px;font-weight:700;font-size:14px;cursor:pointer;opacity:${count===0?'0.5':'1'}">Send Request 📤</button>`;
+    document.body.appendChild(bar);
+  } else {
+    document.getElementById('purchase-bar')?.remove();
+  }
+}
+
+function togglePurchaseMode() {
+  invPurchaseMode = !invPurchaseMode;
+  if (!invPurchaseMode) invPurchaseSelected = {};
+  renderInventoryTab();
+}
+
+function togglePurchaseItem(id) {
+  if (invPurchaseSelected[id]) {
+    delete invPurchaseSelected[id];
+  } else {
+    const item = allInventory.find(i => i.id === id);
+    if (item) invPurchaseSelected[id] = { name: item.name, nameHindi: item.nameHindi||'', unit: item.unit, qty: 1 };
+  }
+  renderInventoryTab();
+}
+
+function updatePurchaseQty(id, val) {
+  if (invPurchaseSelected[id]) invPurchaseSelected[id].qty = Math.max(1, parseInt(val)||1);
+}
+
+function openPurchaseRequestModal() {
+  const items = Object.values(invPurchaseSelected);
+  if (items.length === 0) { showToast('Select at least one item', 'info'); return; }
+  const owner = allUsers.find(u => u.role === 'Owner') || allUsers.find(u => u.role === 'Manager');
+  const box = document.querySelector('#message-modal .modal-box');
+  box.innerHTML = `
+    <div class="modal-header">
+      <span class="modal-title">🛒 Purchase Request / खरीद सूची</span>
+      <button class="modal-close" onclick="closeModal('message-modal')">×</button>
+    </div>
+    <div style="padding:12px">
+      <div style="font-size:13px;font-weight:600;margin-bottom:8px;color:var(--text-muted)">Items to purchase:</div>
+      <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:12px">
+        ${items.map((it,i) => `<div style="display:flex;justify-content:space-between;padding:8px 12px;${i>0?'border-top:1px solid var(--border)':''}">
+          <span style="font-size:14px">${escHtml(it.name)}${it.nameHindi?` / ${escHtml(it.nameHindi)}`:''}</span>
+          <span style="font-weight:700;color:var(--primary)">${it.qty} ${escHtml(it.unit)}</span>
+        </div>`).join('')}
+      </div>
+      <div class="form-group"><label>Note for owner (optional)<input type="text" id="pr-note" placeholder="e.g. needed urgently for dinner" style="font-size:14px!important"></label></div>
+      <p id="pr-error" class="form-error" hidden></p>
+      <div class="modal-footer">
+        <button class="btn btn-primary" onclick="submitPurchaseRequest()">Send to ${owner?escHtml(owner.name):'Owner'}</button>
+      </div>
+    </div>`;
+  document.querySelector('#message-modal .modal-backdrop').onclick = () => closeModal('message-modal');
+  openModal('message-modal');
+}
+
+async function submitPurchaseRequest() {
+  const items = Object.values(invPurchaseSelected);
+  const note = document.getElementById('pr-note')?.value.trim() || '';
+  const owner = allUsers.find(u => u.role === 'Owner') || allUsers.find(u => u.role === 'Manager');
+  const buyingListItems = items.map(it => ({ name: it.name, qty: it.qty, unit: it.unit, rate: 0 }));
+  try {
+    await api('POST', '/api/tasks', {
+      title: `Purchase Request by ${currentUser.name}${note?' — '+note:''}`,
+      category: 'Inventory Purchase',
+      assignedTo: owner?.id || null,
+      requestedBy: currentUser.id,
+      priority: 'Normal',
+      status: 'Pending',
+      dueDate: todayDate(),
+      notes: note,
+      buyingListItems,
+    });
+    invPurchaseMode = false;
+    invPurchaseSelected = {};
+    closeModal('message-modal');
+    showToast('Purchase request sent!', 'success');
+    if (owner?.phone) {
+      const list = items.map(it => `• ${it.name} — ${it.qty} ${it.unit}`).join('\n');
+      openWhatsApp(owner.phone, `🛒 Purchase Request\nFrom: ${currentUser.name}\n\n${list}${note?'\n\nNote: '+note:''}\n— ${settings.resortName}`);
+    }
+    renderInventoryTab();
+  } catch(e) {
+    const el = document.getElementById('pr-error');
+    if (el) { el.textContent = e.message; el.hidden = false; }
+  }
 }
 
 function setInvCategory(cat) {
@@ -2262,6 +2357,26 @@ async function addInventoryCategory() {
 function invItemHTML(item) {
   const low = Number(item.quantity) <= Number(item.threshold) && Number(item.threshold) > 0;
   const val = item.rate > 0 ? '₹' + (Number(item.quantity) * Number(item.rate)).toLocaleString('en-IN') : '';
+  const sel = invPurchaseSelected[item.id];
+
+  if (invPurchaseMode) {
+    return `<div class="inv-item ${low?'low-stock':''} ${sel?'inv-item-selected':''}" data-id="${item.id}" onclick="togglePurchaseItem('${item.id}')" style="cursor:pointer">
+      <div style="display:flex;align-items:center;gap:10px;flex:1">
+        <input type="checkbox" ${sel?'checked':''} onclick="event.stopPropagation();togglePurchaseItem('${item.id}')" style="width:18px;height:18px;cursor:pointer;flex-shrink:0">
+        <div class="inv-item-info" style="flex:1">
+          <div class="inv-item-name">${escHtml(item.name)}${item.nameHindi?` / ${escHtml(item.nameHindi)}`:''}</div>
+          <div class="inv-item-value">Stock: ${item.quantity} ${item.unit}${low?' ⚠️ Low':''}</div>
+        </div>
+      </div>
+      ${sel ? `<div onclick="event.stopPropagation()" style="display:flex;align-items:center;gap:6px;flex-shrink:0">
+        <input type="number" min="1" value="${sel.qty}" id="pqty-${item.id}"
+          oninput="updatePurchaseQty('${item.id}',this.value)"
+          style="width:64px;font-size:14px!important;padding:5px!important;border:1px solid var(--primary);border-radius:6px;text-align:center">
+        <span style="font-size:12px;color:var(--text-muted)">${item.unit}</span>
+      </div>` : ''}
+    </div>`;
+  }
+
   return `<div class="inv-item ${low?'low-stock':''}" data-id="${item.id}">
     <div class="inv-item-info">
       <div class="inv-item-name">${escHtml(item.name)}</div>
