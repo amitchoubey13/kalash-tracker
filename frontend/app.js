@@ -2240,6 +2240,8 @@ async function renderInventoryTab() {
 
   tc.innerHTML = html;
 
+  // always remove stale bar first, then re-add if still in purchase mode
+  document.getElementById('purchase-bar')?.remove();
   if (invPurchaseMode) {
     const bar = document.createElement('div');
     bar.id = 'purchase-bar';
@@ -2248,8 +2250,6 @@ async function renderInventoryTab() {
     bar.innerHTML = `<span style="font-weight:600;font-size:14px">${count} item${count!==1?'s':''} selected<br><span style="font-size:11px;font-weight:400;opacity:0.85">Tap item to select, set qty needed</span></span>
       <button onclick="openPurchaseRequestModal()" ${count===0?'disabled':''} style="background:#fff;color:var(--primary);border:none;padding:8px 18px;border-radius:20px;font-weight:700;font-size:14px;cursor:pointer;opacity:${count===0?'0.5':'1'}">Send Request 📤</button>`;
     document.body.appendChild(bar);
-  } else {
-    document.getElementById('purchase-bar')?.remove();
   }
 }
 
