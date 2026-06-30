@@ -150,6 +150,15 @@ img { max-width: 100%; display: block; }
 .tab-label {
   font-size: 10px;
   font-weight: 500;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.tab-hindi {
+  font-size: 9px;
+  font-weight: 400;
+  opacity: 0.75;
+  display: block;
 }
 
 /* ── Tab Content ──────────────────────────────────────────── */
