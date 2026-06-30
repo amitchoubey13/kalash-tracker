@@ -2276,7 +2276,8 @@ function updatePurchaseQty(id, val) {
 function openPurchaseRequestModal() {
   const items = Object.values(invPurchaseSelected);
   if (items.length === 0) { showToast('Select at least one item', 'info'); return; }
-  const owner = allUsers.find(u => u.role === 'Owner') || allUsers.find(u => u.role === 'Manager');
+  const recipients = allUsers.filter(u => u.role === 'Owner' || u.role === 'Manager');
+  const recipientNames = recipients.map(u => escHtml(u.name)).join(' & ') || 'Owner';
   const box = document.querySelector('#message-modal .modal-box');
   box.innerHTML = `
     <div class="modal-header">
@@ -2291,10 +2292,10 @@ function openPurchaseRequestModal() {
           <span style="font-weight:700;color:var(--primary)">${it.qty} ${escHtml(it.unit)}</span>
         </div>`).join('')}
       </div>
-      <div class="form-group"><label>Note for owner (optional)<input type="text" id="pr-note" placeholder="e.g. needed urgently for dinner" style="font-size:14px!important"></label></div>
+      <div class="form-group"><label>Note (optional)<input type="text" id="pr-note" placeholder="e.g. needed urgently for dinner" style="font-size:14px!important"></label></div>
       <p id="pr-error" class="form-error" hidden></p>
       <div class="modal-footer">
-        <button class="btn btn-primary" onclick="submitPurchaseRequest()">Send to ${owner?escHtml(owner.name):'Owner'}</button>
+        <button class="btn btn-primary" onclick="submitPurchaseRequest()">Send to ${recipientNames} 📤</button>
       </div>
     </div>`;
   document.querySelector('#message-modal .modal-backdrop').onclick = () => closeModal('message-modal');
@@ -2304,13 +2305,14 @@ function openPurchaseRequestModal() {
 async function submitPurchaseRequest() {
   const items = Object.values(invPurchaseSelected);
   const note = document.getElementById('pr-note')?.value.trim() || '';
-  const owner = allUsers.find(u => u.role === 'Owner') || allUsers.find(u => u.role === 'Manager');
+  const recipients = allUsers.filter(u => u.role === 'Owner' || u.role === 'Manager');
+  const primaryRecipient = recipients[0] || null;
   const buyingListItems = items.map(it => ({ name: it.name, qty: it.qty, unit: it.unit, rate: 0 }));
   try {
     await api('POST', '/api/tasks', {
       title: `Purchase Request by ${currentUser.name}${note?' — '+note:''}`,
       category: 'Inventory Purchase',
-      assignedTo: owner?.id || null,
+      assignedTo: primaryRecipient?.id || null,
       requestedBy: currentUser.id,
       priority: 'Normal',
       status: 'Pending',
@@ -2322,10 +2324,10 @@ async function submitPurchaseRequest() {
     invPurchaseSelected = {};
     closeModal('message-modal');
     showToast('Purchase request sent!', 'success');
-    if (owner?.phone) {
-      const list = items.map(it => `• ${it.name} — ${it.qty} ${it.unit}`).join('\n');
-      openWhatsApp(owner.phone, `🛒 Purchase Request\nFrom: ${currentUser.name}\n\n${list}${note?'\n\nNote: '+note:''}\n— ${settings.resortName}`);
-    }
+    // Send WhatsApp to every Owner and Manager who has a phone number
+    const list = items.map(it => `• ${it.name} — ${it.qty} ${it.unit}`).join('\n');
+    const msg = `🛒 Purchase Request\nFrom: ${currentUser.name}\n\n${list}${note?'\n\nNote: '+note:''}\n— ${settings.resortName}`;
+    recipients.filter(u => u.phone).forEach(u => openWhatsApp(u.phone, msg));
     renderInventoryTab();
   } catch(e) {
     const el = document.getElementById('pr-error');
