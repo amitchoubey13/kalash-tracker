@@ -968,10 +968,21 @@ function renderManageStaffPanelHTML() {
     </div>`;
 }
 
-function toggleCollapsible(header) {
-  header.classList.toggle('open');
-  const body = header.nextElementSibling;
-  body.classList.toggle('open');
+function toggleCollapsible(headerOrId) {
+  if (typeof headerOrId === 'string') {
+    // id-based toggle (shift panel)
+    const body = document.getElementById(headerOrId);
+    if (!body) return;
+    const isOpen = body.style.display !== 'none';
+    body.style.display = isOpen ? 'none' : 'block';
+    const header = body.previousElementSibling;
+    if (header) { const ch = header.querySelector('.chevron'); if (ch) ch.style.transform = isOpen ? '' : 'rotate(180deg)'; }
+  } else {
+    // element-based toggle (manage staff, etc.)
+    headerOrId.classList.toggle('open');
+    const body = headerOrId.nextElementSibling;
+    if (body) body.classList.toggle('open');
+  }
 }
 
 function wireCollapsibles() {
@@ -1120,14 +1131,6 @@ function renderShiftManagementPanel() {
     </div>`;
 }
 
-function toggleCollapsible(id) {
-  const body = document.getElementById(id);
-  if (!body) return;
-  const isOpen = body.style.display !== 'none';
-  body.style.display = isOpen ? 'none' : 'block';
-  const header = body.previousElementSibling;
-  if (header) header.querySelector('.chevron').style.transform = isOpen ? '' : 'rotate(180deg)';
-}
 
 function openAddShiftModal() {
   openShiftModal(null);
