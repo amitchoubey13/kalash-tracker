@@ -36,7 +36,7 @@ body {
   font-family: 'Noto Sans', 'Noto Sans Devanagari', sans-serif;
   background: var(--bg);
   color: var(--text);
-  font-size: 14px;
+  font-size: 16px;
   line-height: 1.5;
   max-width: 480px;
   margin: 0 auto;
