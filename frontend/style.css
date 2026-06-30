@@ -133,6 +133,15 @@ img { max-width: 100%; display: block; }
   border-top-color: var(--primary);
 }
 
+.tab-btn[data-tab="notify"] {
+  color: #c62828;
+}
+
+.tab-btn[data-tab="notify"].active {
+  color: #c62828;
+  border-top-color: #c62828;
+}
+
 .tab-icon {
   font-size: 18px;
   line-height: 1;
