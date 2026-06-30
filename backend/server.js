@@ -10,12 +10,38 @@ const { randomUUID: uuidv4 } = require('crypto');
 const app = express();
 const PORT = process.env.PORT || 8080;
 
-// ── Paths ──────────────────────────────────────────────────────────────────
-const DATA_DIR = path.join(__dirname, 'data');
-const UPLOADS_DIR = path.join(__dirname, 'uploads');
+// ── Paths (pkg-aware) ──────────────────────────────────────────────────────
+// When compiled with pkg, process.pkg is set. Writable files must live next
+// to the .exe (process.execPath), not inside the read-only snapshot.
+const IS_PKG = typeof process.pkg !== 'undefined';
+const EXE_DIR = IS_PKG ? path.dirname(process.execPath) : path.join(__dirname, '..');
+const DATA_DIR    = IS_PKG ? path.join(EXE_DIR, 'data')    : path.join(__dirname, 'data');
+const UPLOADS_DIR = IS_PKG ? path.join(EXE_DIR, 'uploads') : path.join(__dirname, 'uploads');
 const FRONTEND_DIR = path.join(__dirname, '..', 'frontend');
 
-// Ensure uploads directory exists
+// Ensure writable directories exist and seed default data files on first run
+if (!fs.existsSync(DATA_DIR)) {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  const defaults = {
+    'users.json': [],
+    'tasks.json': [],
+    'attendance.json': [],
+    'payments.json': [],
+    'shifts.json': [],
+    'expenses.json': [],
+    'expenseCategories.json': ["Electricity","Repairs & Maintenance","Vendor Payment","Fuel/Diesel","Internet/Phone","Gas Tunkey","Misc"],
+    'inventory.json': [],
+    'inventoryCategories.json': ["Vegetables","Grocery","Dairy Product","Gas cylinder"],
+    'inventoryHistory.json': [],
+    'settings.json': { setupDone: false, shiftStartTime: '10:00', resortName: 'Kalash Resort' },
+    'vehiclePermissions.json': [],
+    'foodMenus.json': [],
+    'products.json': [],
+  };
+  Object.entries(defaults).forEach(([file, data]) => {
+    fs.writeFileSync(path.join(DATA_DIR, file), JSON.stringify(data, null, 2));
+  });
+}
 if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 
 // ── Middleware ─────────────────────────────────────────────────────────────
@@ -1145,6 +1171,12 @@ function autoSeedInventory() {
 app.listen(PORT, () => {
   console.log(`Resort Manager server running on http://localhost:${PORT}`);
   autoSeedInventory();
+  if (IS_PKG) {
+    // Auto-open browser when running as compiled exe
+    const { exec } = require('child_process');
+    exec(`start http://localhost:${PORT}`);
+    console.log('Opening browser...');
+  }
 });
 
 module.exports = app;

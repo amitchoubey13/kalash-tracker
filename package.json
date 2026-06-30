@@ -3,13 +3,30 @@
   "version": "1.0.0",
   "description": "Resort staff management app",
   "main": "backend/server.js",
+  "bin": "backend/server.js",
   "scripts": {
-    "start": "node backend/server.js"
+    "start": "node backend/server.js",
+    "build": "npx pkg . --compress GZip --output dist/KalashTracker.exe"
   },
   "dependencies": {
     "cors": "^2.8.5",
     "express": "^4.18.2",
     "multer": "^1.4.5-lts.1",
     "uuid": "^14.0.1"
+  },
+  "devDependencies": {
+    "pkg": "^5.8.1"
+  },
+  "pkg": {
+    "scripts": [
+      "backend/server.js"
+    ],
+    "assets": [
+      "frontend/**/*"
+    ],
+    "targets": [
+      "node18-win-x64"
+    ],
+    "outputPath": "dist"
   }
 }
