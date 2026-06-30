@@ -587,14 +587,27 @@ function taskCardHTML(task) {
       ${requesterName ? ' · Req: ' + escHtml(requesterName) : ''}
     </div>
     ${task.attachmentUrl ? '<img src="' + task.attachmentUrl + '" style="max-height:100px;border-radius:6px;margin-top:6px;cursor:pointer" onclick="showPhotoModalSrc(this.src)">' : ''}
-    ${task.category === 'Inventory Purchase' && task.buyingListItems && task.buyingListItems.length > 0 ? `
-    <div style="margin-top:8px;border:1px solid var(--border);border-radius:8px;overflow:hidden">
-      <div style="background:#f5f5f5;padding:5px 10px;font-size:11px;font-weight:700;color:var(--text-muted);letter-spacing:0.5px">🛒 PURCHASE LIST / खरीद सूची</div>
-      ${task.buyingListItems.map(it => `<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 10px;border-top:1px solid var(--border);font-size:13px">
-        <span>${escHtml(it.name)}</span>
-        <span style="font-weight:700;color:var(--primary)">${it.qty} ${escHtml(it.unit||'')}</span>
-      </div>`).join('')}
-    </div>` : ''}
+    ${task.category === 'Inventory Purchase' && task.buyingListItems && task.buyingListItems.length > 0 ? (() => {
+      const hasPending = task.buyingListItems.some(it => it.received === false);
+      return `<div style="margin-top:8px;border:1px solid var(--border);border-radius:8px;overflow:hidden">
+        <div style="background:#f5f5f5;padding:5px 10px;font-size:11px;font-weight:700;color:var(--text-muted);letter-spacing:0.5px;display:flex;justify-content:space-between">
+          <span>🛒 PURCHASE LIST / खरीद सूची</span>
+          ${hasPending ? '<span style="color:#e65100;font-size:11px">⚠️ Some items pending</span>' : ''}
+        </div>
+        ${task.buyingListItems.map(it => {
+          const isPending = it.received === false;
+          const isReceived = it.received === true;
+          return `<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 10px;border-top:1px solid var(--border);font-size:13px;${isPending?'background:#fff3e0':''}">
+            <span style="${isPending?'text-decoration:line-through;color:#bbb;':''}${isReceived?'color:#388e3c;':''}">${escHtml(it.name)}</span>
+            <span style="display:flex;align-items:center;gap:6px">
+              <span style="font-weight:700;color:${isPending?'#bbb':isReceived?'#388e3c':'var(--primary)'}">${it.receivedQty!==undefined&&isReceived?it.receivedQty:it.qty} ${escHtml(it.unit||'')}</span>
+              ${isReceived?'<span style="font-size:10px;background:#e8f5e9;color:#388e3c;padding:1px 6px;border-radius:8px;font-weight:600">✓ Got</span>':''}
+              ${isPending?'<span style="font-size:10px;background:#fff3e0;color:#e65100;padding:1px 6px;border-radius:8px;font-weight:600">⏳ Pending</span>':''}
+            </span>
+          </div>`;
+        }).join('')}
+      </div>`;
+    })() : ''}
     <div class="card-actions">
       <div class="status-btn-group">
         <button class="status-btn ${task.status==='Pending'?'active-pending':''}" onclick="updateTaskStatus('${tid}','Pending')">Pending</button>
@@ -849,25 +862,38 @@ function showReceiveItemsModal(task) {
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('buying-list-modal')">Skip</button>
-      <button class="btn btn-primary" onclick="confirmReceivedItems(${JSON.stringify(items).replace(/"/g,'&quot;')})">Add to Inventory</button>
+      <button class="btn btn-primary" onclick="confirmReceivedItems(${JSON.stringify(items).replace(/"/g,'&quot;')},'${task.id}')">Add to Inventory</button>
     </div>`;
   document.querySelector('#buying-list-modal .modal-backdrop').onclick = () => closeModal('buying-list-modal');
   openModal('buying-list-modal');
 }
 
-async function confirmReceivedItems(items) {
+async function confirmReceivedItems(items, taskId) {
   const entries = [];
-  const skipped = [];
+  const updatedItems = [];
   const unmatched = [];
+
   items.forEach((item, i) => {
     const checked = document.getElementById('blc-chk-'+i)?.checked;
-    if (!checked) { skipped.push(item.name); return; }
     const qty = parseFloat(document.getElementById('blc-qty-'+i)?.value) || item.qty;
     const rate = parseFloat(document.getElementById('blc-rate-'+i)?.value) || item.rate || 0;
+    updatedItems.push({ ...item, received: !!checked, receivedQty: checked ? qty : 0, rate });
+    if (!checked) return;
     const invItem = allInventory.find(inv => inv.name.toLowerCase() === item.name.toLowerCase());
     if (invItem) entries.push({ id: invItem.id, qty, rate });
     else unmatched.push(item.name);
   });
+
+  // Save received status back on the task
+  if (taskId) {
+    try {
+      const result = await api('PUT', '/api/tasks/' + taskId, { buyingListItems: updatedItems });
+      const idx = allTasks.findIndex(t => t.id === taskId);
+      if (idx !== -1) allTasks[idx] = result.task;
+    } catch(e) {}
+  }
+
+  // Update inventory for received items
   if (entries.length > 0) {
     try {
       await api('POST', '/api/inventory/bulk-add', { entries, loggedBy: currentUser.id, source: 'Purchase', date: todayDate() });
@@ -875,9 +901,22 @@ async function confirmReceivedItems(items) {
       showToast(`✅ ${entries.length} item(s) added to stock`, 'success');
     } catch(e) { showToast(e.message, 'error'); return; }
   }
+
   if (unmatched.length > 0) showToast(`⚠️ Not in inventory: ${unmatched.join(', ')}`, 'info');
-  if (skipped.length > 0) showToast(`⏭ Skipped (not received): ${skipped.join(', ')}`, 'info');
+
+  // Notify Kitchen Staff about pending items via WhatsApp
+  const pendingItems = updatedItems.filter(it => !it.received);
+  if (pendingItems.length > 0) {
+    const task = allTasks.find(t => t.id === taskId);
+    const requesterPhone = task ? getUserPhone(task.requestedBy) : '';
+    const pendingList = pendingItems.map(it => `• ${it.name} (${it.qty} ${it.unit||''})`).join('\n');
+    const msg = `⚠️ Pending Purchase Items\nThe following items from your request were NOT received yet:\n${pendingList}\n— ${settings.resortName}`;
+    if (requesterPhone) openWhatsApp(requesterPhone, msg);
+    showToast(`⏳ ${pendingItems.length} item(s) still pending — Kitchen Staff notified`, 'info');
+  }
+
   closeModal('buying-list-modal');
+  renderTasksTab();
 }
 
 // ── Staff Request (Staff role) ──
