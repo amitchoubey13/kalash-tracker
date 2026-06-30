@@ -1218,9 +1218,9 @@ async function renderAttendanceDay() {
   if (!container) return;
 
   if (!isOwnerOrManager()) {
-    // Own record only
+    // Own record only — editable so staff can mark their own duty in/out
     const rec = records.find(r => r.userId === currentUser.id);
-    container.innerHTML = renderAttCardHTML(currentUser, rec, date, true);
+    container.innerHTML = renderAttCardHTML(currentUser, rec, date, false);
     return;
   }
 
