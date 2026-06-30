@@ -587,6 +587,14 @@ function taskCardHTML(task) {
       ${requesterName ? ' · Req: ' + escHtml(requesterName) : ''}
     </div>
     ${task.attachmentUrl ? '<img src="' + task.attachmentUrl + '" style="max-height:100px;border-radius:6px;margin-top:6px;cursor:pointer" onclick="showPhotoModalSrc(this.src)">' : ''}
+    ${task.category === 'Inventory Purchase' && task.buyingListItems && task.buyingListItems.length > 0 ? `
+    <div style="margin-top:8px;border:1px solid var(--border);border-radius:8px;overflow:hidden">
+      <div style="background:#f5f5f5;padding:5px 10px;font-size:11px;font-weight:700;color:var(--text-muted);letter-spacing:0.5px">🛒 PURCHASE LIST / खरीद सूची</div>
+      ${task.buyingListItems.map(it => `<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 10px;border-top:1px solid var(--border);font-size:13px">
+        <span>${escHtml(it.name)}</span>
+        <span style="font-weight:700;color:var(--primary)">${it.qty} ${escHtml(it.unit||'')}</span>
+      </div>`).join('')}
+    </div>` : ''}
     <div class="card-actions">
       <div class="status-btn-group">
         <button class="status-btn ${task.status==='Pending'?'active-pending':''}" onclick="updateTaskStatus('${tid}','Pending')">Pending</button>
