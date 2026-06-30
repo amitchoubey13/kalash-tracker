@@ -1224,12 +1224,50 @@ async function renderAttendanceDay() {
     return;
   }
 
-  const staffList = allUsers.filter(u => u.role !== 'Owner' || u.id === currentUser.id ? false : true);
   const nonOwners = allUsers.filter(u => u.id !== currentUser.id);
-  container.innerHTML = nonOwners.map(u => {
+  container.innerHTML = renderAttOwnerSummary(nonOwners, records, date);
+}
+
+function renderAttOwnerSummary(users, records, date) {
+  if (users.length === 0) return '<div class="empty-state"><span class="empty-state-icon">👥</span><div class="empty-state-text">No staff found</div></div>';
+
+  const rows = users.map(u => {
     const rec = records.find(r => r.userId === u.id);
-    return renderAttCardHTML(u, rec, date, false);
+    let status, statusColor;
+    if (!rec) { status = 'Absent'; statusColor = '#ef5350'; }
+    else if (rec.onLeave) { status = 'On Leave'; statusColor = '#ff9800'; }
+    else if (rec.dutyIn) { status = 'Present'; statusColor = '#43a047'; }
+    else { status = 'Absent'; statusColor = '#ef5350'; }
+
+    const timeVal = (v) => v ? `<span style="font-weight:600;color:var(--text)">${v}</span>` : `<span style="color:var(--text-muted)">—</span>`;
+
+    return `<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border);flex-wrap:wrap">
+      <div style="min-width:120px">
+        <div style="font-weight:600;font-size:14px">${escHtml(u.name)}</div>
+        <span class="role-badge role-${roleCssClass(u.role)}" style="font-size:11px">${u.role}</span>
+      </div>
+      <span style="font-size:12px;font-weight:700;padding:2px 10px;border-radius:20px;background:${statusColor}22;color:${statusColor};min-width:72px;text-align:center">${status}</span>
+      <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:13px">
+        <span>In: ${timeVal(rec?.dutyIn)}</span>
+        <span>Out: ${timeVal(rec?.dutyOut)}</span>
+        <span>Break: ${timeVal(rec?.breakStart)}${rec?.breakStart||rec?.breakEnd?' – ':' '}${timeVal(rec?.breakEnd)}</span>
+      </div>
+      ${rec?.lateReason ? `<span style="font-size:11px;color:#f57c00;background:#fff3e0;padding:2px 8px;border-radius:10px">Late: ${escHtml(rec.lateReason)}</span>` : ''}
+      ${rec?.leaveReason ? `<span style="font-size:11px;color:#7b1fa2;background:#f3e5f5;padding:2px 8px;border-radius:10px">Leave: ${escHtml(rec.leaveReason)}</span>` : ''}
+    </div>`;
   }).join('');
+
+  const present = records.filter(r => r.dutyIn && !r.onLeave).length;
+  const onLeave = records.filter(r => r.onLeave).length;
+  const absent = users.length - present - onLeave;
+
+  return `
+    <div style="display:flex;gap:10px;padding:10px 14px;background:var(--surface);border-bottom:2px solid var(--border)">
+      <span style="font-size:13px;font-weight:600;color:#43a047">✓ Present: ${present}</span>
+      <span style="font-size:13px;font-weight:600;color:#ff9800">⟳ Leave: ${onLeave}</span>
+      <span style="font-size:13px;font-weight:600;color:#ef5350">✗ Absent: ${absent}</span>
+    </div>
+    <div>${rows}</div>`;
 }
 
 function getShiftForRecord(rec) {
