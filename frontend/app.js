@@ -1648,8 +1648,10 @@ async function renderSalaryTab() {
 }
 
 async function loadSalaryView() {
-  const userId = salarySelectedUserId || (allUsers[0]?.id);
-  const month = selectedMonth || currentMonth();
+  const userId = document.getElementById('salary-user-select')?.value || salarySelectedUserId || (allUsers[0]?.id);
+  const month = document.getElementById('salary-month-picker')?.value || selectedMonth || currentMonth();
+  if (userId) salarySelectedUserId = userId;
+  if (month) selectedMonth = month;
   if (!userId) return;
 
   const user = allUsers.find(u => u.id === userId);
@@ -1732,12 +1734,21 @@ async function submitAddPayment(userId) {
   const note = document.getElementById('pay-note')?.value || '';
   const photoFile = document.getElementById('pay-photo')?.files[0];
   if (!amount || amount <= 0) { showToast('Enter a valid amount', 'error'); return; }
+  if (!date) { showToast('Select a date', 'error'); return; }
   let photoData = null;
   if (photoFile) photoData = await fileToBase64(photoFile);
   try {
     const p = await api('POST', '/api/payments', { userId, amount, date, note, photoData, loggedBy: currentUser.id });
-    allPayments.push(p);
-    showToast('Payment recorded', 'success');
+    const paymentMonth = date.slice(0, 7);
+    // If payment is for a different month than the current view, switch to it
+    if (paymentMonth !== selectedMonth) {
+      selectedMonth = paymentMonth;
+      const picker = document.getElementById('salary-month-picker');
+      if (picker) picker.value = selectedMonth;
+      showToast(`Payment added for ${paymentMonth} — switched view`, 'success');
+    } else {
+      showToast('Payment recorded', 'success');
+    }
     await loadSalaryView();
   } catch(e) { showToast(e.message, 'error'); }
 }
