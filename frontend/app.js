@@ -630,7 +630,12 @@ function openTaskModalById(id) {
 function shareTask(id) {
   const task = allTasks.find(t => t.id === id);
   if (!task) return;
-  const msg = `📋 Task: ${task.title}\nCategory: ${task.category}\nPriority: ${task.priority}\nStatus: ${task.status}${task.dueDate ? '\nDue: ' + formatDate(task.dueDate) : ''}${task.description ? '\nDetails: ' + task.description : ''}\n— ${settings.resortName}`;
+  let msg = `📋 Task: ${task.title}\nCategory: ${task.category}\nPriority: ${task.priority}\nStatus: ${task.status}${task.dueDate ? '\nDue: ' + formatDate(task.dueDate) : ''}${task.description ? '\nDetails: ' + task.description : ''}`;
+  if (task.category === 'Inventory Purchase' && task.buyingListItems?.length > 0) {
+    const list = task.buyingListItems.map(it => `• ${it.name}${it.nameHindi ? ' / ' + it.nameHindi : ''} — ${it.qty} ${it.unit || ''}`).join('\n');
+    msg += `\n\n🛒 खरीद सूची / Purchase List:\n${list}`;
+  }
+  msg += `\n— ${settings.resortName}`;
   openWhatsAppAny(msg);
 }
 
